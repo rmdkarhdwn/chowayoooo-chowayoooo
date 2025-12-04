@@ -114,6 +114,7 @@ export const useFirebase = (userId, position) => {
                         nickname: data.nickname || '익명',
                         score: data.score || 0
                     }))
+                    .filter(player => player.score > 0) // ✅ 0점 제외
                     .sort((a, b) => b.score - a.score)
                     .slice(0, 5);
                 

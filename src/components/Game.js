@@ -18,17 +18,49 @@ function Game({ userId, nickname }) {
     const [score, setScore] = useState(null);
     const scoreInitialized = useRef(false);
 
+    // ✅ ref 추가
+    const positionRef = useRef(position);
+    const directionRef = useRef(direction);
+    const inZoneSinceRef = useRef(inZoneSince);
+    const otherPlayersRef = useRef({});
+    const zoneRef = useRef(null);
+    const squishPlayersRef = useRef({});
+
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
 
     const keysPressed = useKeyboard();
-    const { otherPlayers, zone, loadedScore, leaderboard } = useFirebase(userId, position); // ✅ leaderboard 추가
+    const { otherPlayers, zone, loadedScore, leaderboard } = useFirebase(userId, position);
 
-    // 이미지 로드
     const { normalImage: characterImage, happyImage: characterHappy } = useImageLoader(
         '/character.png',
         '/character-happy.png'
     );
+
+    // ✅ ref 동기화
+    useEffect(() => {
+        positionRef.current = position;
+    }, [position]);
+
+    useEffect(() => {
+        directionRef.current = direction;
+    }, [direction]);
+
+    useEffect(() => {
+        inZoneSinceRef.current = inZoneSince;
+    }, [inZoneSince]);
+
+    useEffect(() => {
+        otherPlayersRef.current = otherPlayers;
+    }, [otherPlayers]);
+
+    useEffect(() => {
+        zoneRef.current = zone;
+    }, [zone]);
+
+    useEffect(() => {
+        squishPlayersRef.current = squishPlayers;
+    }, [squishPlayers]);
 
     // 게임 루프
     useEffect(() => {
@@ -180,73 +212,86 @@ function Game({ userId, nickname }) {
 
     // Canvas 렌더링
     useEffect(() => {
-        const canvas = canvasRef.current;
-        const ctx = canvas.getContext('2d');
+        let animationId;
         
-        const cameraX = position.x - CANVAS_WIDTH / 2;
-        const cameraY = position.y - CANVAS_HEIGHT / 2;
-        
-        // 배경
-        ctx.fillStyle = '#2c3e50';
-        ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
-        
-        // ✅ 그리드 (헬퍼 함수로 교체)
-        renderGrid(ctx, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT);
-        
-        // ✅ 구역 (헬퍼 함수로 교체)
-        renderZone(ctx, zone, cameraX, cameraY);
-        
-        // 다른 유저들
-        if (characterImage) {
-            Object.entries(otherPlayers).forEach(([id, player]) => {
-                const screenX = player.x - cameraX;
-                const screenY = player.y - cameraY;
-                
-                if (isOnScreen(player.x, player.y, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE)) {
+        const render = () => {
+            const canvas = canvasRef.current;
+            if (!canvas || !characterImage || !characterHappy) {
+                animationId = requestAnimationFrame(render);
+                return;
+            }
+            
+            const ctx = canvas.getContext('2d');
+            const cameraX = positionRef.current.x - CANVAS_WIDTH / 2; // ✅ .current
+            const cameraY = positionRef.current.y - CANVAS_HEIGHT / 2; // ✅ .current
+            
+            // 배경
+            ctx.fillStyle = '#2c3e50';
+            ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // 그리드
+            renderGrid(ctx, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT);
+            
+            // 구역
+            renderZone(ctx, zoneRef.current, cameraX, cameraY); // ✅ .current
+            
+            // 다른 유저들
+            if (characterImage) {
+                Object.entries(otherPlayersRef.current).forEach(([id, player]) => { // ✅ .current
+                    const screenX = player.x - cameraX;
+                    const screenY = player.y - cameraY;
                     
-                    // ✅ 여기 교체
-                    if (squishPlayers[id]) {
-                        renderSquishEffect(ctx, characterImage, squishPlayers[id], screenX, screenY, PLAYER_SIZE);
-                    } else {
-                        ctx.drawImage(
-                            characterImage,
-                            screenX - PLAYER_SIZE/2,
-                            screenY - PLAYER_SIZE/2,
-                            PLAYER_SIZE,
-                            PLAYER_SIZE
-                        );
+                    if (isOnScreen(player.x, player.y, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE)) {
+                        if (squishPlayersRef.current[id]) { // ✅ .current
+                            renderSquishEffect(ctx, characterImage, squishPlayersRef.current[id], screenX, screenY, PLAYER_SIZE);
+                        } else {
+                            ctx.drawImage(
+                                characterImage,
+                                screenX - PLAYER_SIZE/2,
+                                screenY - PLAYER_SIZE/2,
+                                PLAYER_SIZE,
+                                PLAYER_SIZE
+                            );
+                        }
                     }
-                    
+                });
+            }
+            
+            // 내 캐릭터
+            if (characterImage && characterHappy) {
+                ctx.save();
+                
+                const currentImage = inZoneSinceRef.current ? characterHappy : characterImage; // ✅ .current
+                const size = inZoneSinceRef.current ? PLAYER_SIZE * 0.8 : PLAYER_SIZE;
+                
+                if (directionRef.current === 'left') { // ✅ .current
+                    ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - size/2);
+                    ctx.scale(-1, 1);
+                    ctx.drawImage(currentImage, -size/2, 0, size, size);
+                } else {
+                    ctx.drawImage(
+                        currentImage, 
+                        CANVAS_WIDTH / 2 - size/2, 
+                        CANVAS_HEIGHT / 2 - size/2, 
+                        size, 
+                        size
+                    );
                 }
-            });
-        }
+                
+                ctx.restore();
+            }
+            
+            animationId = requestAnimationFrame(render);
+        };
         
-       // 내 캐릭터
-    if (characterImage && characterHappy) {
-        ctx.save();
+        render();
         
-        // ✅ 구역 안이면 다른 이미지 사용
-        const currentImage = inZoneSince ? characterHappy : characterImage;
-        const size = inZoneSince ? PLAYER_SIZE * 0.8 : PLAYER_SIZE; // 80%로 줄임
-        
-        if (direction === 'left') {
-            ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - size/2);
-            ctx.scale(-1, 1);
-            ctx.drawImage(currentImage, -size/2, 0, size,size);
-        } else {
-            ctx.drawImage(
-                currentImage, 
-                CANVAS_WIDTH / 2 - size/2, 
-                CANVAS_HEIGHT / 2 - size/2, 
-                size, 
-                size
-            );
-        }
-        
-        ctx.restore();
-    }
-        
-    }, [position, characterImage, characterHappy,direction, otherPlayers, zone, squishPlayers, inZoneSince]);
+        return () => {
+            if (animationId) {
+                cancelAnimationFrame(animationId);
+            }
+        };
+    }, [characterImage, characterHappy, CANVAS_WIDTH, CANVAS_HEIGHT]);
 
     return (
         <>

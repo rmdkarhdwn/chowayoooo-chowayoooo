@@ -3,7 +3,6 @@ import { ref, set, remove, onValue } from 'firebase/database';
 import { database } from '../firebase';
 import { MAP_SIZE } from '../utils/constants';
 
-// ✅ 구역 생성 함수
 const createZone = () => {
     const zoneRef = ref(database, 'zone');
     const newZone = {
@@ -15,9 +14,10 @@ const createZone = () => {
     set(zoneRef, newZone);
 };
 
-export const useFirebase = (userId, position) => {
+export const useFirebase = (userId, position) => { // ✅ score 제거
     const [otherPlayers, setOtherPlayers] = useState({});
     const [zone, setZone] = useState(null);
+    const [loadedScore, setLoadedScore] = useState(null); // null로 시작
 
     // 내 위치 업데이트
     useEffect(() => {
@@ -28,6 +28,23 @@ export const useFirebase = (userId, position) => {
             lastUpdate: Date.now()
         });
     }, [userId, position.x, position.y]);
+
+    useEffect(() => {
+        const scoreRef = ref(database, `scores/${userId}`);
+        
+        const unsubscribe = onValue(scoreRef, (snapshot) => {
+            const scoreData = snapshot.val();
+            
+            if (scoreData && typeof scoreData.score === 'number') {
+                setLoadedScore(scoreData.score);
+            } else {
+                setLoadedScore(0);
+            }
+        }, { onlyOnce: true });
+        
+        return () => unsubscribe();
+    }, [userId]);
+
 
     // 다른 유저 구독
     useEffect(() => {
@@ -46,38 +63,38 @@ export const useFirebase = (userId, position) => {
         return () => unsubscribe();
     }, [userId]);
 
-    // ✅ 구역 구독 + 자동 생성
-useEffect(() => {
-    const zoneRef = ref(database, 'zone');
-    
-    const unsubscribe = onValue(zoneRef, (snapshot) => {
-        const zoneData = snapshot.val();
+    // 구역 구독 + 자동 생성
+    useEffect(() => {
+        const zoneRef = ref(database, 'zone');
         
-        if (zoneData) {
-            setZone(zoneData);
-        } else {
-            // 구역 없으면 생성
-            createZone();
-        }
-    });
-    
-    return () => unsubscribe();
-}, []);
+        const unsubscribe = onValue(zoneRef, (snapshot) => {
+            const zoneData = snapshot.val();
+            
+            if (zoneData) {
+                setZone(zoneData);
+            } else {
+                createZone();
+            }
+        });
+        
+        return () => unsubscribe();
+    }, []);
 
-// ✅ 타이머 체크를 별도로 (1초마다)
-useEffect(() => {
-    if (!zone) return;
-    
-    const checkTimer = setInterval(() => {
-        const elapsed = (Date.now() - zone.createdAt) / 1000;
+    // 타이머 체크
+    useEffect(() => {
+        if (!zone) return;
         
-        if (elapsed >= zone.duration) {
-            createZone();
-        }
-    }, 1000); // 1초마다 체크
-    
-    return () => clearInterval(checkTimer);
-}, [zone]);
+        const checkTimer = setInterval(() => {
+            const elapsed = (Date.now() - zone.createdAt) / 1000;
+            
+            if (elapsed >= zone.duration) {
+                createZone();
+            }
+        }, 1000);
+        
+        return () => clearInterval(checkTimer);
+    }, [zone]);
+
     // 접속 종료 시 삭제
     useEffect(() => {
         return () => {
@@ -86,5 +103,5 @@ useEffect(() => {
         };
     }, [userId]);
 
-    return { otherPlayers, zone };
+    return { otherPlayers, zone, loadedScore };
 };

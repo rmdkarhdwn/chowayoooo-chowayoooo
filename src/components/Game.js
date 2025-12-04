@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useFirebase } from '../hooks/useFirebase';
+import { useImageLoader } from '../hooks/useImageLoader'; // ✅ 추가
 import { MAP_SIZE, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
 import { ref, set } from 'firebase/database';
 import { database } from '../firebase';
 import Leaderboard from './Leaderboard';
-import { isInsideZone, isOnScreen } from '../utils/gameHelpers'; // ✅ 추가
-import { renderGrid, renderZone, renderPlayer, renderSquishEffect } from '../utils/renderHelpers';
+import { isInsideZone, isOnScreen } from '../utils/gameHelpers';
+import { renderGrid, renderZone, renderSquishEffect } from '../utils/renderHelpers';
 
 function Game({ userId, nickname }) {
     const canvasRef = useRef(null);

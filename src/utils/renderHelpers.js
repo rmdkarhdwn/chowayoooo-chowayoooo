@@ -28,6 +28,27 @@ export function renderGrid(ctx, cameraX, cameraY, canvasWidth, canvasHeight) {
 }
 
 // 구역 렌더링
+export function renderZone(ctx, zone, cameraX, cameraY) {
+    if (!zone) return;
+    
+    const zoneScreenX = zone.x - cameraX;
+    const zoneScreenY = zone.y - cameraY;
+    const elapsed = (Date.now() - zone.createdAt) / 1000;
+    const remaining = zone.duration - elapsed;
+    
+    ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+    ctx.fillRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
+    
+    ctx.strokeStyle = '#FFD700';
+    ctx.lineWidth = 3;
+    ctx.strokeRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
+    
+    ctx.fillStyle = 'white';
+    ctx.font = 'bold 24px Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText(Math.ceil(remaining) + 's', zoneScreenX, zoneScreenY);
+}
+
 // 클릭 왜곡 효과
 export function renderSquishEffect(ctx, characterImage, squish, screenX, screenY, playerSize) {
     const pushDepth = 15;

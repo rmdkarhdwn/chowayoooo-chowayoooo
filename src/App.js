@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { auth } from './firebase';
-import Game from './Game';
+import Game from './components/Game';
 
 function App() {
   const [user, setUser] = useState(null);

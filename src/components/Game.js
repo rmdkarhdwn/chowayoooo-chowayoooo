@@ -177,6 +177,11 @@ function Game({ userId }) {
             }}>
                 <div>내 위치: ({Math.floor(position.x)}, {Math.floor(position.y)})</div>
                 <div>접속자: {Object.keys(otherPlayers).length + 1}명</div>
+                    {zone && (
+                    <div style={{ color: '#FFD700', marginTop: '5px' }}>
+                        구역 위치: ({Math.floor(zone.x)}, {Math.floor(zone.y)})
+                    </div>
+                    )}
             </div>
 
             <canvas 

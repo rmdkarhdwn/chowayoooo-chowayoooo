@@ -30,7 +30,7 @@ function Game({ userId, nickname }) {
         img.onload = () => setCharacterImage(img);
 
         const Happy = new Image();
-        Happy.src = './character-happy.png'
+        Happy.src = '/character-happy.png'
         Happy.onload = () => setCharacterHappy(Happy);
     }, []);
 
@@ -88,12 +88,13 @@ function Game({ userId, nickname }) {
     }, [direction, zone, inZoneSince]);
 
     // 5초 체크
+    // 5초 체크
     useEffect(() => {
         if (!inZoneSince || !zone) return;
         
+        // ✅ 이미 점수 받았으면 타이머 중지만 (inZoneSince 유지)
         if (zone.scoredUsers && zone.scoredUsers[userId]) {
-            setInZoneSince(null);
-            return;
+            return; // setInZoneSince(null) 삭제
         }
         
         const checkTimer = setInterval(() => {
@@ -101,7 +102,6 @@ function Game({ userId, nickname }) {
             
             if (elapsed >= 5) {
                 setScore(prev => (prev ?? 0) + 1);
-                setInZoneSince(null);
                 
                 const zoneRef = ref(database, `zone/scoredUsers/${userId}`);
                 set(zoneRef, true);

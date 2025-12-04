@@ -2,12 +2,16 @@ import { useEffect, useRef, useState } from 'react';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useFirebase } from '../hooks/useFirebase';
 import { MAP_SIZE, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
+import { ref, set } from 'firebase/database';
+import { database } from '../firebase';
 
 function Game({ userId }) {
     const canvasRef = useRef(null);
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
     const [characterImage, setCharacterImage] = useState(null);
     const [direction, setDirection] = useState('right');
+    const [score, setScore] = useState(0); // ✅ 점수
+    const [inZoneSince, setInZoneSince] = useState(null); // ✅ 구역 진입 시간
     
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
@@ -21,15 +25,15 @@ function Game({ userId }) {
         img.src = '/character.png';
         img.onload = () => setCharacterImage(img);
     }, []);
+
     // 게임 루프
     useEffect(() => {
         const gameLoop = () => {
             setPosition(prev => {
                 let newX = prev.x;
                 let newY = prev.y;
-                let newDirection = direction; // ✅ 방향 저장
+                let newDirection = direction;
                 
-                // ✅ 방향별로 하나만 체크
                 const moveUp = keysPressed.current['w'] || keysPressed.current['arrowup'];
                 const moveDown = keysPressed.current['s'] || keysPressed.current['arrowdown'];
                 const moveLeft = keysPressed.current['a'] || keysPressed.current['arrowleft'];
@@ -46,23 +50,63 @@ function Game({ userId }) {
                     newDirection = 'right';
                 }
                 
-                // ✅ 방향 업데이트
                 if (newDirection !== direction) {
                     setDirection(newDirection);
                 }
                 
-                // 맵 경계 체크
                 newX = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newX));
                 newY = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newY));
                 
+                // ✅ 구역 안에 있는지 체크
+                if (zone) {
+                    const inZone = 
+                        Math.abs(newX - zone.x) < ZONE_SIZE / 2 &&
+                        Math.abs(newY - zone.y) < ZONE_SIZE / 2;
+                    
+                    if (inZone) {
+                        if (!inZoneSince) {
+                            setInZoneSince(Date.now());
+                        }
+                    } else {
+                        setInZoneSince(null);
+                    }
+                }
+                
                 return { x: newX, y: newY };
-        });
-    };
+            });
+        };
 
-    const interval = setInterval(gameLoop, 1000 / 60);
-    return () => clearInterval(interval);
-}, [direction]); // ✅ direction 의존성 추가
+        const interval = setInterval(gameLoop, 1000 / 60);
+        return () => clearInterval(interval);
+    }, [direction, zone, inZoneSince]);
 
+
+    // ✅ 5초 체크
+    useEffect(() => {
+        if (!inZoneSince || !zone) return;
+        
+        // ✅ 이미 이 구역에서 점수 받았는지 체크
+        if (zone.scoredUsers && zone.scoredUsers[userId]) {
+            setInZoneSince(null); // 이미 받았으면 타이머 리셋
+            return;
+        }
+        
+        const checkTimer = setInterval(() => {
+            const elapsed = (Date.now() - inZoneSince) / 1000;
+            
+            if (elapsed >= 5) {
+                // 점수 획득!
+                setScore(prev => prev + 1);
+                setInZoneSince(null);
+                
+                // ✅ 이 구역에 내 ID 추가 (더 이상 점수 못 받음)
+                const zoneRef = ref(database, `zone/scoredUsers/${userId}`);
+                set(zoneRef, true);
+            }
+        }, 100);
+        
+        return () => clearInterval(checkTimer);
+    }, [inZoneSince, zone, userId]);
     // Canvas 렌더링
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -71,11 +115,9 @@ function Game({ userId }) {
         const cameraX = position.x - CANVAS_WIDTH / 2;
         const cameraY = position.y - CANVAS_HEIGHT / 2;
         
-        // 화면 지우기
         ctx.fillStyle = '#2c3e50';
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         
-        // 그리드
         ctx.strokeStyle = '#34495e';
         ctx.lineWidth = 1;
         
@@ -99,7 +141,6 @@ function Game({ userId }) {
             }
         }
         
-        // 구역
         if (zone) {
             const zoneScreenX = zone.x - cameraX;
             const zoneScreenY = zone.y - cameraY;
@@ -119,7 +160,6 @@ function Game({ userId }) {
             ctx.fillText(Math.ceil(remaining) + 's', zoneScreenX, zoneScreenY);
         }
         
-        // 다른 유저들
         if (characterImage) {
             Object.entries(otherPlayers).forEach(([id, player]) => {
                 const screenX = player.x - cameraX;
@@ -139,7 +179,6 @@ function Game({ userId }) {
             });
         }
         
-        // 내 캐릭터
         if (characterImage) {
             ctx.save();
             
@@ -175,13 +214,23 @@ function Game({ userId }) {
                 fontFamily: 'monospace',
                 zIndex: 1000
             }}>
+                {/* ✅ 점수 표시 */}
+                <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#FFD700' }}>
+                    점수: {score}
+                </div>
                 <div>내 위치: ({Math.floor(position.x)}, {Math.floor(position.y)})</div>
                 <div>접속자: {Object.keys(otherPlayers).length + 1}명</div>
-                    {zone && (
+                {zone && (
                     <div style={{ color: '#FFD700', marginTop: '5px' }}>
                         구역 위치: ({Math.floor(zone.x)}, {Math.floor(zone.y)})
                     </div>
-                    )}
+                )}
+                {/* ✅ 구역 체류 시간 */}
+                {inZoneSince && (
+                    <div style={{ color: '#00FF00', marginTop: '5px' }}>
+                        구역 체류: {((Date.now() - inZoneSince) / 1000).toFixed(1)}초
+                    </div>
+                )}
             </div>
 
             <canvas 

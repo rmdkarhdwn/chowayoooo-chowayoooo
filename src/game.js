@@ -6,11 +6,12 @@ function Game({ userId }) {
     const canvasRef = useRef(null);
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
     const [characterImage, setCharacterImage] = useState(null);
+    const [direction, setDirection] = useState('right'); // ✅ 추가 (기본 오른쪽)
     const keysPressed = useRef({});
-
     const MAP_SIZE = 5000;
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
+    
 
     // 이미지 로드
     useEffect(() => {
@@ -39,45 +40,58 @@ function Game({ userId }) {
     }, []);
 
     // 게임 루프
-    useEffect(() => {
-        const gameLoop = () => {
-            const speed = 5;
+// 게임 루프
+useEffect(() => {
+    const gameLoop = () => {
+        const speed = 5;
+        
+        setPosition(prev => {
+            let newX = prev.x;
+            let newY = prev.y;
             
-            setPosition(prev => {
-                let newX = prev.x;
-                let newY = prev.y;
-                
-                // WASD
-                if (keysPressed.current['w']) newY -= speed;
-                if (keysPressed.current['s']) newY += speed;
-                if (keysPressed.current['a']) newX -= speed;
-                if (keysPressed.current['d']) newX += speed;
-                
-                // 방향키
-                if (keysPressed.current['arrowup']) newY -= speed;
-                if (keysPressed.current['arrowdown']) newY += speed;
-                if (keysPressed.current['arrowleft']) newX -= speed;
-                if (keysPressed.current['arrowright']) newX += speed;
-                
-                // 맵 경계 체크
-                newX = Math.max(100, Math.min(MAP_SIZE - 100, newX));
-                newY = Math.max(100, Math.min(MAP_SIZE - 100, newY));
-                
-                // Firebase에 내 위치 저장
-                const playerRef = ref(database, `players/${userId}`);
-                set(playerRef, {
-                    x: newX,
-                    y: newY,
-                    lastUpdate: Date.now()
-                });
-                
-                return { x: newX, y: newY };
+            // WASD
+            if (keysPressed.current['w']) newY -= speed;
+            if (keysPressed.current['s']) newY += speed;
+            if (keysPressed.current['a']) {
+                newX -= speed;
+                setDirection('left'); // ✅ 왼쪽
+            }
+            if (keysPressed.current['d']) {
+                newX += speed;
+                setDirection('right'); // ✅ 오른쪽
+            }
+            
+            // 방향키
+            if (keysPressed.current['arrowup']) newY -= speed;
+            if (keysPressed.current['arrowdown']) newY += speed;
+            if (keysPressed.current['arrowleft']) {
+                newX -= speed;
+                setDirection('left'); // ✅ 왼쪽
+            }
+            if (keysPressed.current['arrowright']) {
+                newX += speed;
+                setDirection('right'); // ✅ 오른쪽
+            }
+            
+            // 맵 경계 체크
+            newX = Math.max(100, Math.min(MAP_SIZE - 100, newX));
+            newY = Math.max(100, Math.min(MAP_SIZE - 100, newY));
+            
+            // Firebase에 내 위치 저장
+            const playerRef = ref(database, `players/${userId}`);
+            set(playerRef, {
+                x: newX,
+                y: newY,
+                lastUpdate: Date.now()
             });
-        };
+            
+            return { x: newX, y: newY };
+        });
+    };
 
-        const interval = setInterval(gameLoop, 1000 / 60);
-        return () => clearInterval(interval);
-    }, [userId]);
+    const interval = setInterval(gameLoop, 1000 / 60);
+    return () => clearInterval(interval);
+}, [userId]);
 
     // 접속 종료 시 데이터 삭제
     useEffect(() => {
@@ -125,7 +139,16 @@ function Game({ userId }) {
         }
         
         // 캐릭터 그리기 (항상 화면 중앙)
-        if (characterImage) {
+// 캐릭터 그리기 (항상 화면 중앙)
+    if (characterImage) {
+        ctx.save(); // ✅ 현재 상태 저장
+        
+        // ✅ 왼쪽 보면 이미지 반전
+        if (direction === 'left') {
+            ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - 100);
+            ctx.scale(-1, 1); // 좌우 반전
+            ctx.drawImage(characterImage, -100, 0, 200, 200);
+        } else {
             ctx.drawImage(
                 characterImage, 
                 CANVAS_WIDTH / 2 - 100, 
@@ -134,6 +157,9 @@ function Game({ userId }) {
                 200
             );
         }
+        
+        ctx.restore(); // ✅ 원래 상태로 복구
+    }
         
     }, [position, characterImage]);
 

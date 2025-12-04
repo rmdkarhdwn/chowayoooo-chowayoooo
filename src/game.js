@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
-import { ref, set, onValue, remove } from 'firebase/database'; // ✅ 추가
-import { database } from './firebase'; // ✅ 추가
+import { ref, set, remove } from 'firebase/database';
+import { database } from './firebase';
 
 function Game({ userId }) {
     const canvasRef = useRef(null);
-    const [position, setPosition] = useState({ x: 1500, y: 1500 });
+    const [position, setPosition] = useState({ x: 2500, y: 2500 });
     const [characterImage, setCharacterImage] = useState(null);
     const keysPressed = useRef({});
 
@@ -19,7 +19,7 @@ function Game({ userId }) {
         img.onload = () => setCharacterImage(img);
     }, []);
 
-    // 키보드 입력
+    // ✅ 키보드 입력 (추가)
     useEffect(() => {
         const handleKeyDown = (e) => {
             keysPressed.current[e.key.toLowerCase()] = true;
@@ -47,16 +47,23 @@ function Game({ userId }) {
                 let newX = prev.x;
                 let newY = prev.y;
                 
+                // WASD
                 if (keysPressed.current['w']) newY -= speed;
                 if (keysPressed.current['s']) newY += speed;
                 if (keysPressed.current['a']) newX -= speed;
                 if (keysPressed.current['d']) newX += speed;
                 
-                // 맵 경계 체크
-                newX = Math.max(25, Math.min(MAP_SIZE - 25, newX));
-                newY = Math.max(25, Math.min(MAP_SIZE - 25, newY));
+                // 방향키
+                if (keysPressed.current['arrowup']) newY -= speed;
+                if (keysPressed.current['arrowdown']) newY += speed;
+                if (keysPressed.current['arrowleft']) newX -= speed;
+                if (keysPressed.current['arrowright']) newX += speed;
                 
-                // ✅ Firebase에 내 위치 저장 (추가)
+                // 맵 경계 체크
+                newX = Math.max(100, Math.min(MAP_SIZE - 100, newX));
+                newY = Math.max(100, Math.min(MAP_SIZE - 100, newY));
+                
+                // Firebase에 내 위치 저장
                 const playerRef = ref(database, `players/${userId}`);
                 set(playerRef, {
                     x: newX,
@@ -70,9 +77,9 @@ function Game({ userId }) {
 
         const interval = setInterval(gameLoop, 1000 / 60);
         return () => clearInterval(interval);
-    }, [userId]); // ✅ userId 의존성 추가
+    }, [userId]);
 
-    // ✅ 접속 종료 시 데이터 삭제 (추가)
+    // 접속 종료 시 데이터 삭제
     useEffect(() => {
         return () => {
             const playerRef = ref(database, `players/${userId}`);
@@ -97,9 +104,9 @@ function Game({ userId }) {
         ctx.strokeStyle = '#34495e';
         ctx.lineWidth = 1;
         
-        for (let x = 0; x < MAP_SIZE; x += 150) { // ✅ 100 → 150
+        for (let x = 0; x < MAP_SIZE; x += 150) {
             const screenX = x - cameraX;
-            if (screenX >= -100 && screenX <= CANVAS_WIDTH + 100) {
+            if (screenX >= -150 && screenX <= CANVAS_WIDTH + 150) {
                 ctx.beginPath();
                 ctx.moveTo(screenX, 0);
                 ctx.lineTo(screenX, CANVAS_HEIGHT);
@@ -107,9 +114,9 @@ function Game({ userId }) {
             }
         }
         
-        for (let y = 0; y < MAP_SIZE; y += 150) { // ✅ 100 → 150
+        for (let y = 0; y < MAP_SIZE; y += 150) {
             const screenY = y - cameraY;
-            if (screenY >= -100 && screenY <= CANVAS_HEIGHT + 100) {
+            if (screenY >= -150 && screenY <= CANVAS_HEIGHT + 150) {
                 ctx.beginPath();
                 ctx.moveTo(0, screenY);
                 ctx.lineTo(CANVAS_WIDTH, screenY);

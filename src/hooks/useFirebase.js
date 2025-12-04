@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ref, set, remove, onValue } from 'firebase/database';
+import { ref, set, remove, onValue, onDisconnect } from 'firebase/database'; 
 import { database } from '../firebase';
 import { MAP_SIZE } from '../utils/constants';
 
@@ -14,21 +14,27 @@ const createZone = () => {
     set(zoneRef, newZone);
 };
 
-export const useFirebase = (userId, position) => { // ✅ score 제거
+export const useFirebase = (userId, position) => {
     const [otherPlayers, setOtherPlayers] = useState({});
     const [zone, setZone] = useState(null);
-    const [loadedScore, setLoadedScore] = useState(null); // null로 시작
+    const [loadedScore, setLoadedScore] = useState(null);
+    const [leaderboard, setLeaderboard] = useState([]);
 
     // 내 위치 업데이트
     useEffect(() => {
         const playerRef = ref(database, `players/${userId}`);
+        
         set(playerRef, {
             x: position.x,
             y: position.y,
             lastUpdate: Date.now()
         });
+        
+        onDisconnect(playerRef).remove();
+        
     }, [userId, position.x, position.y]);
 
+    // 점수 불러오기
     useEffect(() => {
         const scoreRef = ref(database, `scores/${userId}`);
         
@@ -44,7 +50,6 @@ export const useFirebase = (userId, position) => { // ✅ score 제거
         
         return () => unsubscribe();
     }, [userId]);
-
 
     // 다른 유저 구독
     useEffect(() => {
@@ -95,13 +100,31 @@ export const useFirebase = (userId, position) => { // ✅ score 제거
         return () => clearInterval(checkTimer);
     }, [zone]);
 
-    // 접속 종료 시 삭제
+    // 리더보드 구독
     useEffect(() => {
-        return () => {
-            const playerRef = ref(database, `players/${userId}`);
-            remove(playerRef);
-        };
-    }, [userId]);
+        const scoresRef = ref(database, 'scores');
+        
+        const unsubscribe = onValue(scoresRef, (snapshot) => {
+            const scoresData = snapshot.val();
+            
+            if (scoresData) {
+                const sorted = Object.entries(scoresData)
+                    .map(([uid, data]) => ({
+                        userId: uid,
+                        nickname: data.nickname || '익명',
+                        score: data.score || 0
+                    }))
+                    .sort((a, b) => b.score - a.score)
+                    .slice(0, 5);
+                
+                setLeaderboard(sorted);
+            } else {
+                setLeaderboard([]);
+            }
+        });
+        
+        return () => unsubscribe();
+    }, []);
 
-    return { otherPlayers, zone, loadedScore };
+    return { otherPlayers, zone, loadedScore, leaderboard };
 };

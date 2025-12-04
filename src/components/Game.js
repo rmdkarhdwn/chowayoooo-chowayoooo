@@ -21,36 +21,34 @@ function Game({ userId }) {
         img.src = '/character.png';
         img.onload = () => setCharacterImage(img);
     }, []);
-
     // 게임 루프
     useEffect(() => {
         const gameLoop = () => {
             setPosition(prev => {
                 let newX = prev.x;
                 let newY = prev.y;
+                let newDirection = direction; // ✅ 방향 저장
                 
-                // WASD
-                if (keysPressed.current['w']) newY -= PLAYER_SPEED;
-                if (keysPressed.current['s']) newY += PLAYER_SPEED;
-                if (keysPressed.current['a']) {
+                // ✅ 방향별로 하나만 체크
+                const moveUp = keysPressed.current['w'] || keysPressed.current['arrowup'];
+                const moveDown = keysPressed.current['s'] || keysPressed.current['arrowdown'];
+                const moveLeft = keysPressed.current['a'] || keysPressed.current['arrowleft'];
+                const moveRight = keysPressed.current['d'] || keysPressed.current['arrowright'];
+                
+                if (moveUp) newY -= PLAYER_SPEED;
+                if (moveDown) newY += PLAYER_SPEED;
+                if (moveLeft) {
                     newX -= PLAYER_SPEED;
-                    setDirection('left');
+                    newDirection = 'left';
                 }
-                if (keysPressed.current['d']) {
+                if (moveRight) {
                     newX += PLAYER_SPEED;
-                    setDirection('right');
+                    newDirection = 'right';
                 }
                 
-                // 방향키
-                if (keysPressed.current['arrowup']) newY -= PLAYER_SPEED;
-                if (keysPressed.current['arrowdown']) newY += PLAYER_SPEED;
-                if (keysPressed.current['arrowleft']) {
-                    newX -= PLAYER_SPEED;
-                    setDirection('left');
-                }
-                if (keysPressed.current['arrowright']) {
-                    newX += PLAYER_SPEED;
-                    setDirection('right');
+                // ✅ 방향 업데이트
+                if (newDirection !== direction) {
+                    setDirection(newDirection);
                 }
                 
                 // 맵 경계 체크
@@ -58,12 +56,12 @@ function Game({ userId }) {
                 newY = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newY));
                 
                 return { x: newX, y: newY };
-            });
-        };
+        });
+    };
 
-        const interval = setInterval(gameLoop, 1000 / 60);
-        return () => clearInterval(interval);
-    }, []);
+    const interval = setInterval(gameLoop, 1000 / 60);
+    return () => clearInterval(interval);
+}, [direction]); // ✅ direction 의존성 추가
 
     // Canvas 렌더링
     useEffect(() => {

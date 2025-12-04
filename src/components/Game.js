@@ -5,12 +5,12 @@ import { MAP_SIZE, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '..
 import { ref, set } from 'firebase/database';
 import { database } from '../firebase';
 import Leaderboard from './Leaderboard';
+import { isInsideZone, isOnScreen } from '../utils/gameHelpers'; // ✅ 추가
+import { renderGrid, renderZone, renderPlayer, renderSquishEffect } from '../utils/renderHelpers';
 
 function Game({ userId, nickname }) {
     const canvasRef = useRef(null);
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
-    const [characterImage, setCharacterImage] = useState(null);
-    const [characterHappy, setCharacterHappy] = useState(null); // ✅ 추가
     const [direction, setDirection] = useState('right');
     const [inZoneSince, setInZoneSince] = useState(null);
     const [squishPlayers, setSquishPlayers] = useState({});
@@ -24,15 +24,10 @@ function Game({ userId, nickname }) {
     const { otherPlayers, zone, loadedScore, leaderboard } = useFirebase(userId, position); // ✅ leaderboard 추가
 
     // 이미지 로드
-    useEffect(() => {
-        const img = new Image();
-        img.src = '/character.png';
-        img.onload = () => setCharacterImage(img);
-
-        const Happy = new Image();
-        Happy.src = '/character-happy.png'
-        Happy.onload = () => setCharacterHappy(Happy);
-    }, []);
+    const { normalImage: characterImage, happyImage: characterHappy } = useImageLoader(
+        '/character.png',
+        '/character-happy.png'
+    );
 
     // 게임 루프
     useEffect(() => {
@@ -65,10 +60,9 @@ function Game({ userId, nickname }) {
                 newX = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newX));
                 newY = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newY));
                 
+                // ✅ 헬퍼 함수 사용
                 if (zone) {
-                    const inZone = 
-                        Math.abs(newX - zone.x) < ZONE_SIZE / 2 &&
-                        Math.abs(newY - zone.y) < ZONE_SIZE / 2;
+                    const inZone = isInsideZone(newX, newY, zone, ZONE_SIZE);
                     
                     if (inZone) {
                         if (!inZoneSince) {
@@ -191,119 +185,27 @@ function Game({ userId, nickname }) {
         const cameraX = position.x - CANVAS_WIDTH / 2;
         const cameraY = position.y - CANVAS_HEIGHT / 2;
         
+        // 배경
         ctx.fillStyle = '#2c3e50';
         ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
         
-        ctx.strokeStyle = '#34495e';
-        ctx.lineWidth = 1;
+        // ✅ 그리드 (헬퍼 함수로 교체)
+        renderGrid(ctx, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT);
         
-        for (let x = 0; x < MAP_SIZE; x += GRID_SPACING) {
-            const screenX = x - cameraX;
-            if (screenX >= -GRID_SPACING && screenX <= CANVAS_WIDTH + GRID_SPACING) {
-                ctx.beginPath();
-                ctx.moveTo(screenX, 0);
-                ctx.lineTo(screenX, CANVAS_HEIGHT);
-                ctx.stroke();
-            }
-        }
+        // ✅ 구역 (헬퍼 함수로 교체)
+        renderZone(ctx, zone, cameraX, cameraY);
         
-        for (let y = 0; y < MAP_SIZE; y += GRID_SPACING) {
-            const screenY = y - cameraY;
-            if (screenY >= -GRID_SPACING && screenY <= CANVAS_HEIGHT + GRID_SPACING) {
-                ctx.beginPath();
-                ctx.moveTo(0, screenY);
-                ctx.lineTo(CANVAS_WIDTH, screenY);
-                ctx.stroke();
-            }
-        }
-        
-        if (zone) {
-            const zoneScreenX = zone.x - cameraX;
-            const zoneScreenY = zone.y - cameraY;
-            const elapsed = (Date.now() - zone.createdAt) / 1000;
-            const remaining = zone.duration - elapsed;
-            
-            ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
-            ctx.fillRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
-            
-            ctx.strokeStyle = '#FFD700';
-            ctx.lineWidth = 3;
-            ctx.strokeRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
-            
-            ctx.fillStyle = 'white';
-            ctx.font = 'bold 24px Arial';
-            ctx.textAlign = 'center';
-            ctx.fillText(Math.ceil(remaining) + 's', zoneScreenX, zoneScreenY);
-        }
-        
+        // 다른 유저들
         if (characterImage) {
             Object.entries(otherPlayers).forEach(([id, player]) => {
                 const screenX = player.x - cameraX;
                 const screenY = player.y - cameraY;
                 
-                if (screenX > -PLAYER_SIZE && screenX < CANVAS_WIDTH + PLAYER_SIZE &&
-                    screenY > -PLAYER_SIZE && screenY < CANVAS_HEIGHT + PLAYER_SIZE) {
+                if (isOnScreen(player.x, player.y, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE)) {
                     
+                    // ✅ 여기 교체
                     if (squishPlayers[id]) {
-                        const squish = squishPlayers[id];
-                        const pushDepth = 15;
-                        
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = PLAYER_SIZE;
-                        tempCanvas.height = PLAYER_SIZE;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        
-                        tempCtx.drawImage(characterImage, 0, 0, PLAYER_SIZE, PLAYER_SIZE);
-                        const imageData = tempCtx.getImageData(0, 0, PLAYER_SIZE, PLAYER_SIZE);
-                        
-                        ctx.save();
-                        
-                        const clickPixelX = (squish.clickX + 1) * PLAYER_SIZE / 2;
-                        const clickPixelY = (squish.clickY + 1) * PLAYER_SIZE / 2;
-                        
-                        const outputCanvas = document.createElement('canvas');
-                        outputCanvas.width = PLAYER_SIZE;
-                        outputCanvas.height = PLAYER_SIZE;
-                        const outputCtx = outputCanvas.getContext('2d');
-                        
-                        for (let y = 0; y < PLAYER_SIZE; y++) {
-                            for (let x = 0; x < PLAYER_SIZE; x++) {
-                                const dx = x - clickPixelX;
-                                const dy = y - clickPixelY;
-                                const distance = Math.sqrt(dx * dx + dy * dy);
-                                const maxDist = PLAYER_SIZE / 2;
-                                
-                                if (distance < maxDist) {
-                                    const pushAmount = (1 - distance / maxDist) * pushDepth;
-                                    const angle = Math.atan2(dy, dx);
-                                    
-                                    const sourceX = x + Math.cos(angle) * pushAmount;
-                                    const sourceY = y + Math.sin(angle) * pushAmount;
-                                    
-                                    if (sourceX >= 0 && sourceX < PLAYER_SIZE && 
-                                        sourceY >= 0 && sourceY < PLAYER_SIZE) {
-                                        const srcIdx = (Math.floor(sourceY) * PLAYER_SIZE + Math.floor(sourceX)) * 4;
-                                        
-                                        if (srcIdx >= 0 && srcIdx < imageData.data.length - 3) {
-                                            outputCtx.fillStyle = `rgba(${imageData.data[srcIdx]},${imageData.data[srcIdx+1]},${imageData.data[srcIdx+2]},${imageData.data[srcIdx+3]/255})`;
-                                            outputCtx.fillRect(x, y, 1, 1);
-                                        }
-                                    }
-                                } else {
-                                    const srcIdx = (y * PLAYER_SIZE + x) * 4;
-                                    outputCtx.fillStyle = `rgba(${imageData.data[srcIdx]},${imageData.data[srcIdx+1]},${imageData.data[srcIdx+2]},${imageData.data[srcIdx+3]/255})`;
-                                    outputCtx.fillRect(x, y, 1, 1);
-                                }
-                            }
-                        }
-                        
-                        ctx.drawImage(
-                            outputCanvas,
-                            screenX - PLAYER_SIZE/2,
-                            screenY - PLAYER_SIZE/2
-                        );
-                        
-                        ctx.restore();
+                        renderSquishEffect(ctx, characterImage, squishPlayers[id], screenX, screenY, PLAYER_SIZE);
                     } else {
                         ctx.drawImage(
                             characterImage,
@@ -313,6 +215,7 @@ function Game({ userId, nickname }) {
                             PLAYER_SIZE
                         );
                     }
+                    
                 }
             });
         }

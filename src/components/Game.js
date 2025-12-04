@@ -4,11 +4,13 @@ import { useFirebase } from '../hooks/useFirebase';
 import { MAP_SIZE, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
 import { ref, set } from 'firebase/database';
 import { database } from '../firebase';
+import Leaderboard from './Leaderboard';
 
-function Game({ userId }) {
+function Game({ userId, nickname }) {
     const canvasRef = useRef(null);
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
     const [characterImage, setCharacterImage] = useState(null);
+    const [characterHappy, setCharacterHappy] = useState(null); // ✅ 추가
     const [direction, setDirection] = useState('right');
     const [inZoneSince, setInZoneSince] = useState(null);
     const [squishPlayers, setSquishPlayers] = useState({});
@@ -19,13 +21,17 @@ function Game({ userId }) {
     const CANVAS_HEIGHT = window.innerHeight;
 
     const keysPressed = useKeyboard();
-    const { otherPlayers, zone, loadedScore } = useFirebase(userId, position);
+    const { otherPlayers, zone, loadedScore, leaderboard } = useFirebase(userId, position); // ✅ leaderboard 추가
 
     // 이미지 로드
     useEffect(() => {
         const img = new Image();
         img.src = '/character.png';
         img.onload = () => setCharacterImage(img);
+
+        const Happy = new Image();
+        Happy.src = './character-happy.png'
+        Happy.onload = () => setCharacterHappy(Happy);
     }, []);
 
     // 게임 루프
@@ -123,6 +129,7 @@ function Game({ userId }) {
         const scoreRef = ref(database, `scores/${userId}`);
         set(scoreRef, {
             score: score,
+            nickname: nickname,
             lastUpdate: Date.now()
         });
     }, [score, userId]);
@@ -310,27 +317,32 @@ function Game({ userId }) {
             });
         }
         
-        if (characterImage) {
-            ctx.save();
-            
-            if (direction === 'left') {
-                ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - PLAYER_SIZE/2);
-                ctx.scale(-1, 1);
-                ctx.drawImage(characterImage, -PLAYER_SIZE/2, 0, PLAYER_SIZE, PLAYER_SIZE);
-            } else {
-                ctx.drawImage(
-                    characterImage, 
-                    CANVAS_WIDTH / 2 - PLAYER_SIZE/2, 
-                    CANVAS_HEIGHT / 2 - PLAYER_SIZE/2, 
-                    PLAYER_SIZE, 
-                    PLAYER_SIZE
-                );
-            }
-            
-            ctx.restore();
+       // 내 캐릭터
+    if (characterImage && characterHappy) {
+        ctx.save();
+        
+        // ✅ 구역 안이면 다른 이미지 사용
+        const currentImage = inZoneSince ? characterHappy : characterImage;
+        const size = inZoneSince ? PLAYER_SIZE * 0.8 : PLAYER_SIZE; // 80%로 줄임
+        
+        if (direction === 'left') {
+            ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - size/2);
+            ctx.scale(-1, 1);
+            ctx.drawImage(currentImage, -size/2, 0, size,size);
+        } else {
+            ctx.drawImage(
+                currentImage, 
+                CANVAS_WIDTH / 2 - size/2, 
+                CANVAS_HEIGHT / 2 - size/2, 
+                size, 
+                size
+            );
         }
         
-    }, [position, characterImage, direction, otherPlayers, zone, squishPlayers]);
+        ctx.restore();
+    }
+        
+    }, [position, characterImage, characterHappy,direction, otherPlayers, zone, squishPlayers, inZoneSince]);
 
     return (
         <>
@@ -361,6 +373,8 @@ function Game({ userId }) {
                     </div>
                 )}
             </div>
+
+            <Leaderboard leaderboard={leaderboard} myUserId={userId} />
 
             <canvas 
                 ref={canvasRef} 

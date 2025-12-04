@@ -10,8 +10,9 @@ function Game({ userId }) {
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
     const [characterImage, setCharacterImage] = useState(null);
     const [direction, setDirection] = useState('right');
-    const [score, setScore] = useState(0); // ✅ 점수
-    const [inZoneSince, setInZoneSince] = useState(null); // ✅ 구역 진입 시간
+    const [score, setScore] = useState(0);
+    const [inZoneSince, setInZoneSince] = useState(null);
+    const [squishPlayers, setSquishPlayers] = useState({}); // ✅ 추가
     
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
@@ -57,7 +58,7 @@ function Game({ userId }) {
                 newX = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newX));
                 newY = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newY));
                 
-                // ✅ 구역 안에 있는지 체크
+                // 구역 안에 있는지 체크
                 if (zone) {
                     const inZone = 
                         Math.abs(newX - zone.x) < ZONE_SIZE / 2 &&
@@ -80,14 +81,12 @@ function Game({ userId }) {
         return () => clearInterval(interval);
     }, [direction, zone, inZoneSince]);
 
-
-    // ✅ 5초 체크
+    // 5초 체크
     useEffect(() => {
         if (!inZoneSince || !zone) return;
         
-        // ✅ 이미 이 구역에서 점수 받았는지 체크
         if (zone.scoredUsers && zone.scoredUsers[userId]) {
-            setInZoneSince(null); // 이미 받았으면 타이머 리셋
+            setInZoneSince(null);
             return;
         }
         
@@ -95,11 +94,9 @@ function Game({ userId }) {
             const elapsed = (Date.now() - inZoneSince) / 1000;
             
             if (elapsed >= 5) {
-                // 점수 획득!
                 setScore(prev => prev + 1);
                 setInZoneSince(null);
                 
-                // ✅ 이 구역에 내 ID 추가 (더 이상 점수 못 받음)
                 const zoneRef = ref(database, `zone/scoredUsers/${userId}`);
                 set(zoneRef, true);
             }
@@ -107,6 +104,57 @@ function Game({ userId }) {
         
         return () => clearInterval(checkTimer);
     }, [inZoneSince, zone, userId]);
+
+    // Canvas 클릭 이벤트
+    useEffect(() => {
+        const canvas = canvasRef.current;
+        
+        const handleClick = (e) => {
+            const rect = canvas.getBoundingClientRect();
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+            
+            const cameraX = position.x - CANVAS_WIDTH / 2;
+            const cameraY = position.y - CANVAS_HEIGHT / 2;
+            
+            const worldX = clickX + cameraX;
+            const worldY = clickY + cameraY;
+            
+            Object.entries(otherPlayers).forEach(([id, player]) => {
+                const dist = Math.sqrt(
+                    Math.pow(worldX - player.x, 2) + 
+                    Math.pow(worldY - player.y, 2)
+                );
+                
+                if (dist < PLAYER_SIZE / 2) {
+                    // ✅ 클릭한 위치 저장
+                    const clickOffsetX = (worldX - player.x) / (PLAYER_SIZE / 2);
+                    const clickOffsetY = (worldY - player.y) / (PLAYER_SIZE / 2);
+                    
+                    setSquishPlayers(prev => ({
+                        ...prev,
+                        [id]: {
+                            clickX: clickOffsetX,
+                            clickY: clickOffsetY,
+                            time: Date.now()
+                        }
+                    }));
+                    
+                    setTimeout(() => {
+                        setSquishPlayers(prev => {
+                            const newState = {...prev};
+                            delete newState[id];
+                            return newState;
+                        });
+                    }, 500);
+                }
+            });
+        };
+        
+        canvas.addEventListener('click', handleClick);
+        return () => canvas.removeEventListener('click', handleClick);
+    }, [position, otherPlayers]);
+
     // Canvas 렌더링
     useEffect(() => {
         const canvas = canvasRef.current;
@@ -160,6 +208,7 @@ function Game({ userId }) {
             ctx.fillText(Math.ceil(remaining) + 's', zoneScreenX, zoneScreenY);
         }
         
+       // 다른 유저들
         if (characterImage) {
             Object.entries(otherPlayers).forEach(([id, player]) => {
                 const screenX = player.x - cameraX;
@@ -168,17 +217,86 @@ function Game({ userId }) {
                 if (screenX > -PLAYER_SIZE && screenX < CANVAS_WIDTH + PLAYER_SIZE &&
                     screenY > -PLAYER_SIZE && screenY < CANVAS_HEIGHT + PLAYER_SIZE) {
                     
-                    ctx.drawImage(
-                        characterImage,
-                        screenX - PLAYER_SIZE/2,
-                        screenY - PLAYER_SIZE/2,
-                        PLAYER_SIZE,
-                        PLAYER_SIZE
-                    );
+                    if (squishPlayers[id]) {
+                        // ✅ 찌그러진 효과
+                        const squish = squishPlayers[id];
+                        const pushDepth = 15; // 들어가는 깊이 왜곡효과
+                        
+                        // 픽셀별로 왜곡
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = PLAYER_SIZE;
+                        tempCanvas.height = PLAYER_SIZE;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        
+                        tempCtx.drawImage(characterImage, 0, 0, PLAYER_SIZE, PLAYER_SIZE);
+                        const imageData = tempCtx.getImageData(0, 0, PLAYER_SIZE, PLAYER_SIZE);
+                        
+                        ctx.save();
+                        
+                        // 클릭 위치 계산
+                        const clickPixelX = (squish.clickX + 1) * PLAYER_SIZE / 2;
+                        const clickPixelY = (squish.clickY + 1) * PLAYER_SIZE / 2;
+                        
+                        // 새 캔버스에 왜곡된 이미지 그리기
+                        const outputCanvas = document.createElement('canvas');
+                        outputCanvas.width = PLAYER_SIZE;
+                        outputCanvas.height = PLAYER_SIZE;
+                        const outputCtx = outputCanvas.getContext('2d');
+                        
+                        for (let y = 0; y < PLAYER_SIZE; y++) {
+                            for (let x = 0; x < PLAYER_SIZE; x++) {
+                                const dx = x - clickPixelX;
+                                const dy = y - clickPixelY;
+                                const distance = Math.sqrt(dx * dx + dy * dy);
+                                const maxDist = PLAYER_SIZE / 2;
+                                
+                                if (distance < maxDist) {
+                                    // 거리에 따라 안쪽으로 당기기
+                                    const pushAmount = (1 - distance / maxDist) * pushDepth;
+                                    const angle = Math.atan2(dy, dx);
+                                    
+                                    const sourceX = x + Math.cos(angle) * pushAmount;
+                                    const sourceY = y + Math.sin(angle) * pushAmount;
+                                    
+                                    if (sourceX >= 0 && sourceX < PLAYER_SIZE && 
+                                        sourceY >= 0 && sourceY < PLAYER_SIZE) {
+                                        const srcIdx = (Math.floor(sourceY) * PLAYER_SIZE + Math.floor(sourceX)) * 4;
+                                        const destIdx = (y * PLAYER_SIZE + x) * 4;
+                                        
+                                        if (srcIdx >= 0 && srcIdx < imageData.data.length - 3) {
+                                            outputCtx.fillStyle = `rgba(${imageData.data[srcIdx]},${imageData.data[srcIdx+1]},${imageData.data[srcIdx+2]},${imageData.data[srcIdx+3]/255})`;
+                                            outputCtx.fillRect(x, y, 1, 1);
+                                        }
+                                    }
+                                } else {
+                                    const srcIdx = (y * PLAYER_SIZE + x) * 4;
+                                    outputCtx.fillStyle = `rgba(${imageData.data[srcIdx]},${imageData.data[srcIdx+1]},${imageData.data[srcIdx+2]},${imageData.data[srcIdx+3]/255})`;
+                                    outputCtx.fillRect(x, y, 1, 1);
+                                }
+                            }
+                        }
+                        
+                        ctx.drawImage(
+                            outputCanvas,
+                            screenX - PLAYER_SIZE/2,
+                            screenY - PLAYER_SIZE/2
+                        );
+                        
+                        ctx.restore();
+                    } else {
+                        ctx.drawImage(
+                            characterImage,
+                            screenX - PLAYER_SIZE/2,
+                            screenY - PLAYER_SIZE/2,
+                            PLAYER_SIZE,
+                            PLAYER_SIZE
+                        );
+                    }
                 }
             });
         }
         
+        // 내 캐릭터
         if (characterImage) {
             ctx.save();
             
@@ -199,7 +317,7 @@ function Game({ userId }) {
             ctx.restore();
         }
         
-    }, [position, characterImage, direction, otherPlayers, zone]);
+    }, [position, characterImage, direction, otherPlayers, zone, squishPlayers]); // ✅ squishPlayers 추가
 
     return (
         <>
@@ -214,7 +332,6 @@ function Game({ userId }) {
                 fontFamily: 'monospace',
                 zIndex: 1000
             }}>
-                {/* ✅ 점수 표시 */}
                 <div style={{ fontSize: '20px', fontWeight: 'bold', color: '#FFD700' }}>
                     점수: {score}
                 </div>
@@ -225,7 +342,6 @@ function Game({ userId }) {
                         구역 위치: ({Math.floor(zone.x)}, {Math.floor(zone.y)})
                     </div>
                 )}
-                {/* ✅ 구역 체류 시간 */}
                 {inZoneSince && (
                     <div style={{ color: '#00FF00', marginTop: '5px' }}>
                         구역 체류: {((Date.now() - inZoneSince) / 1000).toFixed(1)}초
@@ -243,7 +359,8 @@ function Game({ userId }) {
                     top: 0,
                     left: 0,
                     margin: 0,
-                    padding: 0
+                    padding: 0,
+                    cursor: 'pointer' // ✅ 마우스 커서
                 }}
             />
         </>

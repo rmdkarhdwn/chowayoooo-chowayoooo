@@ -1,18 +1,35 @@
 import { useEffect, useRef, useState } from 'react';
-import { ref, set, remove } from 'firebase/database';
+import { ref, set, remove, onValue } from 'firebase/database';
 import { database } from './firebase';
 
 function Game({ userId }) {
     const canvasRef = useRef(null);
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
     const [characterImage, setCharacterImage] = useState(null);
-    const [direction, setDirection] = useState('right'); // ✅ 추가 (기본 오른쪽)
+    const [direction, setDirection] = useState('right'); 
+    const [otherPlayers, setOtherPlayers] = useState({}); 
     const keysPressed = useRef({});
     const MAP_SIZE = 5000;
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
     
-
+    // ✅ 다른 유저 데이터 실시간 받기
+    useEffect(() => {
+        const playersRef = ref(database, 'players');
+        
+        const unsubscribe = onValue(playersRef, (snapshot) => {
+            const players = snapshot.val();
+            if (players) {
+                // 내 ID 제외
+                const { [userId]: me, ...others } = players;
+                setOtherPlayers(others);
+            } else {
+                setOtherPlayers({});
+            }
+        });
+        
+        return () => unsubscribe();
+    }, [userId]);
     // 이미지 로드
     useEffect(() => {
         const img = new Image();
@@ -138,7 +155,28 @@ useEffect(() => {
             }
         }
         
-        // 캐릭터 그리기 (항상 화면 중앙)
+    if (characterImage) {
+    Object.entries(otherPlayers).forEach(([id, player]) => {
+        const screenX = player.x - cameraX;
+        const screenY = player.y - cameraY;
+        
+        // 화면 안에 있을 때만 그리기
+        if (screenX > -200 && screenX < CANVAS_WIDTH + 200 &&
+            screenY > -200 && screenY < CANVAS_HEIGHT + 200) {
+            
+            // 반투명하게
+            ctx.globalAlpha = 1;
+            ctx.drawImage(
+                characterImage,
+                screenX - 100,
+                screenY - 100,
+                200,
+                200
+            );
+            ctx.globalAlpha = 1.0;
+        }
+    });
+    }
 // 캐릭터 그리기 (항상 화면 중앙)
     if (characterImage) {
         ctx.save(); // ✅ 현재 상태 저장
@@ -161,9 +199,26 @@ useEffect(() => {
         ctx.restore(); // ✅ 원래 상태로 복구
     }
         
-    }, [position, characterImage]);
+    }, [position, characterImage, direction, otherPlayers]); // ✅ otherPlayers 추가
 
-    return (
+return (
+    <>
+        {/* ✅ 위치 표시 추가 */}
+        <div style={{
+            position: 'fixed',
+            top: 10,
+            left: 10,
+            color: 'white',
+            backgroundColor: 'rgba(0,0,0,0.5)',
+            padding: '10px',
+            borderRadius: '5px',
+            fontFamily: 'monospace',
+            zIndex: 1000
+        }}>
+            <div>내 위치: ({Math.floor(position.x)}, {Math.floor(position.y)})</div>
+            <div>접속자: {Object.keys(otherPlayers).length + 1}명</div>
+        </div>
+
         <canvas 
             ref={canvasRef} 
             width={CANVAS_WIDTH} 
@@ -177,7 +232,8 @@ useEffect(() => {
                 padding: 0
             }}
         />
-    );
+    </>
+);
 }
 
 export default Game;

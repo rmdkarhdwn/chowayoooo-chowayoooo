@@ -10,6 +10,7 @@ import Leaderboard from './Leaderboard';
 import { isInsideZone, isOnScreen } from '../utils/gameHelpers';
 import { renderGrid, renderZone, renderSquishEffect } from '../utils/renderHelpers';
 
+
 function Game({ userId, nickname }) {
     const canvasRef = useRef(null);
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
@@ -18,7 +19,7 @@ function Game({ userId, nickname }) {
     const [squishPlayers, setSquishPlayers] = useState({});
     const [score, setScore] = useState(null);
     const scoreInitialized = useRef(false);
-    const { playClick, playScore, playBGM } = useSound();
+    const { playClick, playScore, playBGM, playZoneEnd } = useSound(); // ✅ playZoneEnd 추가
 
     // ✅ ref 추가
     const positionRef = useRef(position);
@@ -27,6 +28,9 @@ function Game({ userId, nickname }) {
     const otherPlayersRef = useRef({});
     const zoneRef = useRef(null);
     const squishPlayersRef = useRef({});
+    const prevZone = useRef(null);
+    const wasInZone = useRef(false);
+    const prevZoneId = useRef(null);
 
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
@@ -144,7 +148,6 @@ function Game({ userId, nickname }) {
             
             if (elapsed >= 5) {
                 setScore(prev => (prev ?? 0) + 1);
-                playScore(); // ✅ 점수 사운드
                 
                 const zoneRef = ref(database, `zone/scoredUsers/${userId}`);
                 set(zoneRef, true);
@@ -152,7 +155,46 @@ function Game({ userId, nickname }) {
         }, 100);
         
         return () => clearInterval(checkTimer);
-    }, [inZoneSince, zone, userId,playScore]);
+    }, [inZoneSince, zone, userId]);
+    const zoneSound = useRef(null);
+
+    // 구역 사운드 초기화
+    useEffect(() => {
+        zoneSound.current = new Audio('/sounds/zone.mp3'); // 구역용 사운드 추가
+        zoneSound.current.loop = true;
+        zoneSound.current.volume = 0.3;
+    }, []);
+
+    // 구역 진입/이탈 체크
+    useEffect(() => {
+        if (inZoneSince) {
+            wasInZone.current = true;
+            
+            if (zoneSound.current) {
+                zoneSound.current.play().catch(e => console.log('Zone sound failed:', e));
+            }
+        } else {
+            // ✅ wasInZone은 그대로 유지 (구역이 사라질 때만 false)
+            
+            if (zoneSound.current) {
+                zoneSound.current.pause();
+                zoneSound.current.currentTime = 0;
+            }
+        }
+    }, [inZoneSince]);
+
+    // 구역 변경 감지
+    useEffect(() => {
+        // 구역 ID가 바뀌고 && 안에 있었을 때
+        if (prevZoneId.current && zone && zone.id !== prevZoneId.current && wasInZone.current) {
+            console.log('🎵 구역 바뀜! 사운드 재생!');
+            playZoneEnd();
+            wasInZone.current = false;
+        }
+        
+        prevZoneId.current = zone?.id || null;
+    }, [zone, playZoneEnd]);
+
 
     // 점수 불러오기 (딱 한 번)
     useEffect(() => {

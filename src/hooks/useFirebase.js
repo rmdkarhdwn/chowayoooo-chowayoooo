@@ -6,6 +6,7 @@ import { MAP_WIDTH, MAP_HEIGHT } from '../utils/constants';
 const createZone = () => {
     const zoneRef = ref(database, 'zone');
     const newZone = {
+        id: Date.now(), // ✅ 고유 ID 추가
         x: Math.random() * (MAP_WIDTH - 600) + 300,   // ✅ MAP_WIDTH
         y: Math.random() * (MAP_HEIGHT - 600) + 300,  // ✅ MAP_HEIGHT
         createdAt: Date.now(),

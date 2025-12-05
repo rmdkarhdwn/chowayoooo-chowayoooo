@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useFirebase } from '../hooks/useFirebase';
-import { useImageLoader } from '../hooks/useImageLoader'; // ✅ 추가
+import { useImageLoader } from '../hooks/useImageLoader';
 import { MAP_SIZE, MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
 import { ref, set } from 'firebase/database';
+import { useSound } from '../hooks/useSound';
 import { database } from '../firebase';
 import Leaderboard from './Leaderboard';
 import { isInsideZone, isOnScreen } from '../utils/gameHelpers';
@@ -17,6 +18,7 @@ function Game({ userId, nickname }) {
     const [squishPlayers, setSquishPlayers] = useState({});
     const [score, setScore] = useState(null);
     const scoreInitialized = useRef(false);
+    const { playClick, playScore, playBGM } = useSound();
 
     // ✅ ref 추가
     const positionRef = useRef(position);
@@ -69,6 +71,10 @@ function Game({ userId, nickname }) {
     useEffect(() => {
     zoneImageRef.current = zoneImage;
     }, [zoneImage]);
+
+    useEffect(() => {
+        playBGM();
+        }, []);
 
     // 게임 루프
     useEffect(() => {
@@ -138,6 +144,7 @@ function Game({ userId, nickname }) {
             
             if (elapsed >= 5) {
                 setScore(prev => (prev ?? 0) + 1);
+                playScore(); // ✅ 점수 사운드
                 
                 const zoneRef = ref(database, `zone/scoredUsers/${userId}`);
                 set(zoneRef, true);
@@ -145,7 +152,7 @@ function Game({ userId, nickname }) {
         }, 100);
         
         return () => clearInterval(checkTimer);
-    }, [inZoneSince, zone, userId]);
+    }, [inZoneSince, zone, userId,playScore]);
 
     // 점수 불러오기 (딱 한 번)
     useEffect(() => {
@@ -194,6 +201,7 @@ function Game({ userId, nickname }) {
                 if (dist < PLAYER_SIZE / 2) {
                     const clickOffsetX = (worldX - player.x) / (PLAYER_SIZE / 2);
                     const clickOffsetY = (worldY - player.y) / (PLAYER_SIZE / 2);
+                    playClick(); // ✅ 클릭 사운드
                     
                     setSquishPlayers(prev => ({
                         ...prev,

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useFirebase } from '../hooks/useFirebase';
 import { useImageLoader } from '../hooks/useImageLoader'; // ✅ 추가
-import { MAP_SIZE, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
+import { MAP_SIZE, MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
 import { ref, set } from 'firebase/database';
 import { database } from '../firebase';
 import Leaderboard from './Leaderboard';
@@ -32,10 +32,14 @@ function Game({ userId, nickname }) {
     const keysPressed = useKeyboard();
     const { otherPlayers, zone, loadedScore, leaderboard } = useFirebase(userId, position);
 
-    const { normalImage: characterImage, happyImage: characterHappy } = useImageLoader(
+    // 이미지 로드
+    const { normalImage: characterImage, happyImage: characterHappy, backgroundImage, zoneImage } = useImageLoader(
         '/character.png',
-        '/character-happy.png'
+        '/character-happy.png',
+        '/background.png',
+        '/zone.png'  // ✅ 추가
     );
+    const zoneImageRef = useRef(null);
 
     // ✅ ref 동기화
     useEffect(() => {
@@ -61,6 +65,10 @@ function Game({ userId, nickname }) {
     useEffect(() => {
         squishPlayersRef.current = squishPlayers;
     }, [squishPlayers]);
+
+    useEffect(() => {
+    zoneImageRef.current = zoneImage;
+    }, [zoneImage]);
 
     // 게임 루프
     useEffect(() => {
@@ -90,8 +98,9 @@ function Game({ userId, nickname }) {
                     setDirection(newDirection);
                 }
                 
-                newX = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newX));
-                newY = Math.max(PLAYER_SIZE/2, Math.min(MAP_SIZE - PLAYER_SIZE/2, newY));
+                newX = Math.max(PLAYER_SIZE/2, Math.min(MAP_WIDTH - PLAYER_SIZE/2, newX));   // ✅ MAP_WIDTH
+                newY = Math.max(PLAYER_SIZE/2, Math.min(MAP_HEIGHT - PLAYER_SIZE/2, newY));  // ✅ MAP_HEIGHT
+
                 
                 // ✅ 헬퍼 함수 사용
                 if (zone) {
@@ -210,8 +219,14 @@ function Game({ userId, nickname }) {
         return () => canvas.removeEventListener('click', handleClick);
     }, [position, otherPlayers]);
 
-    // Canvas 렌더링
+    const backgroundRef = useRef(null);
+
     useEffect(() => {
+        backgroundRef.current = backgroundImage;
+    }, [backgroundImage]);
+
+    // Canvas 렌더링
+        useEffect(() => {
         let animationId;
         
         const render = () => {
@@ -222,18 +237,37 @@ function Game({ userId, nickname }) {
             }
             
             const ctx = canvas.getContext('2d');
-            const cameraX = positionRef.current.x - CANVAS_WIDTH / 2; // ✅ .current
-            const cameraY = positionRef.current.y - CANVAS_HEIGHT / 2; // ✅ .current
             
-            // 배경
-            ctx.fillStyle = '#2c3e50';
+            // ✅ 카메라 제한 없음 (원래대로)
+            const cameraX = positionRef.current.x - CANVAS_WIDTH / 2;
+            const cameraY = positionRef.current.y - CANVAS_HEIGHT / 2;
+            
+            // 배경색 (맵 밖 영역)
+            ctx.fillStyle = '#1a1a1a';
             ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
             
-            // 그리드
-            renderGrid(ctx, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT);
-            
+            // 배경 이미지 (0,0 ~ MAP_WIDTH, MAP_HEIGHT만)
+            if (backgroundRef.current) {
+                const bgX = -cameraX;
+                const bgY = -cameraY;
+                
+                // 배경이 화면에 보이는 경우만 그리기
+                if (bgX + MAP_WIDTH > 0 && bgX < CANVAS_WIDTH &&
+                    bgY + MAP_HEIGHT > 0 && bgY < CANVAS_HEIGHT) {
+                    ctx.drawImage(
+                        backgroundRef.current,
+                        bgX,
+                        bgY,
+                        MAP_WIDTH,
+                        MAP_HEIGHT
+                    );
+                }
+            }
+
             // 구역
-            renderZone(ctx, zoneRef.current, cameraX, cameraY); // ✅ .current
+            renderZone(ctx, zoneRef.current, cameraX, cameraY, zoneImageRef.current);
+
+            // ... 나머지 동일 ...
             
             // 다른 유저들
             if (characterImage) {

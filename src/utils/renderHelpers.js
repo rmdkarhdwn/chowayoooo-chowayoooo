@@ -27,8 +27,8 @@ export function renderGrid(ctx, cameraX, cameraY, canvasWidth, canvasHeight) {
     }
 }
 
-// 구역 렌더링
-export function renderZone(ctx, zone, cameraX, cameraY) {
+// ✅ 구역 렌더링 (이미지 버전)
+export function renderZone(ctx, zone, cameraX, cameraY, zoneImage) {
     if (!zone) return;
     
     const zoneScreenX = zone.x - cameraX;
@@ -36,20 +36,39 @@ export function renderZone(ctx, zone, cameraX, cameraY) {
     const elapsed = (Date.now() - zone.createdAt) / 1000;
     const remaining = zone.duration - elapsed;
     
-    ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
-    ctx.fillRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
+    // 호박 이미지
+    if (zoneImage) {
+        ctx.drawImage(
+            zoneImage,
+            zoneScreenX - ZONE_SIZE/2,
+            zoneScreenY - ZONE_SIZE/2,
+            ZONE_SIZE,
+            ZONE_SIZE
+        );
+    } else {
+        // 로딩 중 기본 디자인
+        ctx.fillStyle = 'rgba(255, 215, 0, 0.3)';
+        ctx.fillRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
+        
+        ctx.strokeStyle = '#FFD700';
+        ctx.lineWidth = 3;
+        ctx.strokeRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
+    }
     
-    ctx.strokeStyle = '#FFD700';
-    ctx.lineWidth = 3;
-    ctx.strokeRect(zoneScreenX - ZONE_SIZE/2, zoneScreenY - ZONE_SIZE/2, ZONE_SIZE, ZONE_SIZE);
+    // 타이머
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.8)';
+    ctx.beginPath();
+    ctx.arc(zoneScreenX, zoneScreenY, 30, 0, Math.PI * 2);
+    ctx.fill();
     
-    ctx.fillStyle = 'white';
+    ctx.fillStyle = 'black';
     ctx.font = 'bold 24px Arial';
     ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     ctx.fillText(Math.ceil(remaining) + 's', zoneScreenX, zoneScreenY);
 }
-    // 클릭 왜곡 효과
-    // 왜곡 효과 캐시
+
+    // 클릭 왜곡 효과 캐싱
     const squishCache = new Map();
 
     export function renderSquishEffect(ctx, characterImage, squish, screenX, screenY, playerSize) {

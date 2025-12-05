@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react';
 import { ref, set, remove, onValue, onDisconnect } from 'firebase/database'; 
 import { database } from '../firebase';
-import { MAP_SIZE } from '../utils/constants';
+import { MAP_WIDTH, MAP_HEIGHT } from '../utils/constants';
 
 const createZone = () => {
     const zoneRef = ref(database, 'zone');
     const newZone = {
-        x: Math.random() * (MAP_SIZE - 600) + 300,
-        y: Math.random() * (MAP_SIZE - 600) + 300,
+        x: Math.random() * (MAP_WIDTH - 600) + 300,   // ✅ MAP_WIDTH
+        y: Math.random() * (MAP_HEIGHT - 600) + 300,  // ✅ MAP_HEIGHT
         createdAt: Date.now(),
         duration: 30
     };

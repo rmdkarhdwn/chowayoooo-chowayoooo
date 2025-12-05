@@ -15,11 +15,12 @@ const createZone = () => {
     set(zoneRef, newZone);
 };
 
-export const useFirebase = (userId, position) => {
+export const useFirebase = (userId, position,nickname) => {
     const [otherPlayers, setOtherPlayers] = useState({});
     const [zone, setZone] = useState(null);
     const [loadedScore, setLoadedScore] = useState(null);
     const [leaderboard, setLeaderboard] = useState([]);
+    const [squishes, setSquishes] = useState({}); // ✅ {} 빈 객체
 
     // 내 위치 업데이트
     useEffect(() => {
@@ -28,12 +29,13 @@ export const useFirebase = (userId, position) => {
         set(playerRef, {
             x: position.x,
             y: position.y,
+            nickname: nickname,
             lastUpdate: Date.now()
         });
         
         onDisconnect(playerRef).remove();
         
-    }, [userId, position.x, position.y]);
+    }, [userId, position.x, position.y,nickname]);
 
     // 점수 불러오기
     useEffect(() => {
@@ -128,5 +130,17 @@ export const useFirebase = (userId, position) => {
         return () => unsubscribe();
     }, []);
 
-    return { otherPlayers, zone, loadedScore, leaderboard };
+    // ✅ squishes 구독
+    useEffect(() => {
+        const squishesRef = ref(database, 'squishes');
+        
+        const unsubscribe = onValue(squishesRef, (snapshot) => {
+            const squishesData = snapshot.val();
+            setSquishes(squishesData || {});
+        });
+        
+        return () => unsubscribe();
+    }, []);
+
+    return { otherPlayers, zone, loadedScore, leaderboard, squishes }; // ✅ squishes 추가
 };

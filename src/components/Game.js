@@ -3,7 +3,7 @@ import { useKeyboard } from '../hooks/useKeyboard';
 import { useFirebase } from '../hooks/useFirebase';
 import { useImageLoader } from '../hooks/useImageLoader';
 import { MAP_SIZE, MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
-import { ref, set } from 'firebase/database';
+import { ref, set,remove } from 'firebase/database';
 import { useSound } from '../hooks/useSound';
 import { database } from '../firebase';
 import Leaderboard from './Leaderboard';
@@ -20,6 +20,8 @@ function Game({ userId, nickname }) {
     const [score, setScore] = useState(null);
     const scoreInitialized = useRef(false);
     const { playClick, playScore, playBGM, playZoneEnd } = useSound(); // ✅ playZoneEnd 추가
+    const backgroundRef = useRef(null); // ✅ 여기로 이동
+    
 
     // ✅ ref 추가
     const positionRef = useRef(position);
@@ -29,14 +31,17 @@ function Game({ userId, nickname }) {
     const zoneRef = useRef(null);
     const squishPlayersRef = useRef({});
     const prevZone = useRef(null);
+    const squishesRef = useRef({}); 
     const wasInZone = useRef(false);
     const prevZoneId = useRef(null);
 
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
+    
 
     const keysPressed = useKeyboard();
-    const { otherPlayers, zone, loadedScore, leaderboard } = useFirebase(userId, position);
+   const { otherPlayers, zone, loadedScore, leaderboard, squishes } = useFirebase(userId, position, nickname); // ✅ squishes 추가
+
 
     // 이미지 로드
     const { normalImage: characterImage, happyImage: characterHappy, backgroundImage, zoneImage } = useImageLoader(
@@ -45,6 +50,7 @@ function Game({ userId, nickname }) {
         '/background.png',
         '/zone.png'  // ✅ 추가
     );
+
     const zoneImageRef = useRef(null);
 
     // ✅ ref 동기화
@@ -69,16 +75,24 @@ function Game({ userId, nickname }) {
     }, [zone]);
 
     useEffect(() => {
-        squishPlayersRef.current = squishPlayers;
-    }, [squishPlayers]);
+    squishesRef.current = squishes;
+    }, [squishes]);
 
     useEffect(() => {
     zoneImageRef.current = zoneImage;
     }, [zoneImage]);
 
     useEffect(() => {
+        backgroundRef.current = backgroundImage;
+    }, [backgroundImage]);
+
+    useEffect(() => {
         playBGM();
         }, []);
+        
+    useEffect(() => {
+        squishPlayersRef.current = squishPlayers;
+    }, [squishPlayers]);
 
     // 게임 루프
     useEffect(() => {
@@ -243,8 +257,23 @@ function Game({ userId, nickname }) {
                 if (dist < PLAYER_SIZE / 2) {
                     const clickOffsetX = (worldX - player.x) / (PLAYER_SIZE / 2);
                     const clickOffsetY = (worldY - player.y) / (PLAYER_SIZE / 2);
-                    playClick(); // ✅ 클릭 사운드
                     
+                    playClick();
+                    
+                    // ✅ Firebase에 저장
+                    const squishRef = ref(database, `squishes/${id}`);
+                    set(squishRef, {
+                        clickX: clickOffsetX,
+                        clickY: clickOffsetY,
+                        time: Date.now()
+                    });
+                    
+                    // 500ms 후 삭제
+                    setTimeout(() => {
+                        remove(squishRef);
+                    }, 500);
+                    
+                    // 로컬 state도 업데이트 (즉각 반응)
                     setSquishPlayers(prev => ({
                         ...prev,
                         [id]: {
@@ -267,13 +296,7 @@ function Game({ userId, nickname }) {
         
         canvas.addEventListener('click', handleClick);
         return () => canvas.removeEventListener('click', handleClick);
-    }, [position, otherPlayers]);
-
-    const backgroundRef = useRef(null);
-
-    useEffect(() => {
-        backgroundRef.current = backgroundImage;
-    }, [backgroundImage]);
+    }, [position, otherPlayers, playClick]);
 
     // Canvas 렌더링
         useEffect(() => {
@@ -327,7 +350,6 @@ function Game({ userId, nickname }) {
                     
                     if (isOnScreen(player.x, player.y, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE)) {
                         
-                        // ✅ 다른 플레이어도 구역 체크
                         const playerInZone = zoneRef.current && isInsideZone(
                             player.x, 
                             player.y, 
@@ -338,8 +360,12 @@ function Game({ userId, nickname }) {
                         const playerImage = playerInZone ? characterHappy : characterImage;
                         const playerSize = playerInZone ? PLAYER_SIZE * 0.8 : PLAYER_SIZE;
                         
-                        if (squishPlayersRef.current[id]) {
-                            renderSquishEffect(ctx, playerImage, squishPlayersRef.current[id], screenX, screenY, playerSize);
+                        // ✅ Firebase squishes 우선, 없으면 로컬
+                        // ✅ 안전하게 접근
+                        const squish = squishPlayersRef.current?.[id];
+                        
+                        if (squish) {
+                            renderSquishEffect(ctx, playerImage, squish, screenX, screenY, playerSize);
                         } else {
                             ctx.drawImage(
                                 playerImage,
@@ -349,18 +375,43 @@ function Game({ userId, nickname }) {
                                 playerSize
                             );
                         }
+                        
+                        // ✅ 닉네임 표시
+                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                        ctx.fillRect(
+                            screenX - 50,
+                            screenY - playerSize/2 - 25,
+                            100,
+                            20
+                        );
+                        
+                        ctx.fillStyle = 'white';
+                        ctx.font = 'bold 14px Arial';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(
+                            player.nickname || '익명',
+                            screenX,
+                            screenY - playerSize/2 - 10
+                        );
                     }
                 });
             }
             
             // 내 캐릭터
+            // 내 캐릭터
             if (characterImage && characterHappy) {
+                console.log('내 캐릭터 그리기:', {
+                    currentImage: inZoneSinceRef.current ? 'happy' : 'normal',
+                    size: inZoneSinceRef.current ? PLAYER_SIZE * 0.8 : PLAYER_SIZE,
+                    direction: directionRef.current
+                });
+                
                 ctx.save();
                 
-                const currentImage = inZoneSinceRef.current ? characterHappy : characterImage; // ✅ .current
+                const currentImage = inZoneSinceRef.current ? characterHappy : characterImage;
                 const size = inZoneSinceRef.current ? PLAYER_SIZE * 0.8 : PLAYER_SIZE;
                 
-                if (directionRef.current === 'left') { // ✅ .current
+                if (directionRef.current === 'left') {
                     ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - size/2);
                     ctx.scale(-1, 1);
                     ctx.drawImage(currentImage, -size/2, 0, size, size);
@@ -375,6 +426,24 @@ function Game({ userId, nickname }) {
                 }
                 
                 ctx.restore();
+                
+                // ✅ 내 닉네임
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(
+                    CANVAS_WIDTH / 2 - 50,
+                    CANVAS_HEIGHT / 2 - size/2 - 25,
+                    100,
+                    20
+                );
+                
+                ctx.fillStyle = '#FFD700';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(
+                    nickname,
+                    CANVAS_WIDTH / 2,
+                    CANVAS_HEIGHT / 2 - size/2 - 10
+                );
             }
             
             animationId = requestAnimationFrame(render);
@@ -406,17 +475,6 @@ function Game({ userId, nickname }) {
                     점수: {score ?? 0}
                 </div>
                 <div>내 위치: ({Math.floor(position.x)}, {Math.floor(position.y)})</div>
-                <div>접속자: {Object.keys(otherPlayers).length + 1}명</div>
-                {zone && (
-                    <div style={{ color: '#FFD700', marginTop: '5px' }}>
-                        구역 위치: ({Math.floor(zone.x)}, {Math.floor(zone.y)})
-                    </div>
-                )}
-                {inZoneSince && (
-                    <div style={{ color: '#00FF00', marginTop: '5px' }}>
-                        구역 체류: {((Date.now() - inZoneSince) / 1000).toFixed(1)}초
-                    </div>
-                )}
             </div>
 
             <Leaderboard leaderboard={leaderboard} myUserId={userId} />

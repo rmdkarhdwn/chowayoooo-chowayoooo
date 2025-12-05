@@ -319,23 +319,34 @@ function Game({ userId, nickname }) {
 
             // ... 나머지 동일 ...
             
-            // 다른 유저들
+            // Canvas 렌더링 - 다른 유저들
             if (characterImage) {
                 Object.entries(otherPlayersRef.current).forEach(([id, player]) => {
                     const screenX = player.x - cameraX;
                     const screenY = player.y - cameraY;
                     
                     if (isOnScreen(player.x, player.y, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE)) {
+                        
+                        // ✅ 다른 플레이어도 구역 체크
+                        const playerInZone = zoneRef.current && isInsideZone(
+                            player.x, 
+                            player.y, 
+                            zoneRef.current, 
+                            ZONE_SIZE
+                        );
+                        
+                        const playerImage = playerInZone ? characterHappy : characterImage;
+                        const playerSize = playerInZone ? PLAYER_SIZE * 0.8 : PLAYER_SIZE;
+                        
                         if (squishPlayersRef.current[id]) {
-                            renderSquishEffect(ctx, characterImage, squishPlayersRef.current[id], screenX, screenY, PLAYER_SIZE);
+                            renderSquishEffect(ctx, playerImage, squishPlayersRef.current[id], screenX, screenY, playerSize);
                         } else {
-                            // ✅ 모든 유저를 같은 이미지로 렌더링
                             ctx.drawImage(
-                                characterImage,
-                                screenX - PLAYER_SIZE/2,
-                                screenY - PLAYER_SIZE/2,
-                                PLAYER_SIZE,
-                                PLAYER_SIZE
+                                playerImage,
+                                screenX - playerSize/2,
+                                screenY - playerSize/2,
+                                playerSize,
+                                playerSize
                             );
                         }
                     }

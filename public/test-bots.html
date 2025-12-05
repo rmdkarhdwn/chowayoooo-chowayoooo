@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Bot Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background: #2c3e50;
+            color: white;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin: 20px 0;
+        }
+        .stat-card {
+            background: rgba(255, 255, 255, 0.1);
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        .stat-value {
+            font-size: 36px;
+            font-weight: bold;
+            color: #FFD700;
+        }
+        .stat-label {
+            font-size: 14px;
+            margin-top: 5px;
+            opacity: 0.8;
+        }
+        button {
+            padding: 15px 30px;
+            font-size: 18px;
+            background: #FFD700;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 10px;
+        }
+        button:hover {
+            background: #FFC700;
+        }
+        button:disabled {
+            background: #666;
+            cursor: not-allowed;
+        }
+        #status {
+            margin-top: 20px;
+            font-family: monospace;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+        .player-list {
+            margin-top: 20px;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 5px;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .player-item {
+            padding: 5px;
+            margin: 3px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 3px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🤖 봇 테스트 & 서버 모니터링</h1>
+        
+        <!-- 실시간 통계 -->
+        <div class="stats">
+            <div class="stat-card">
+                <div class="stat-value" id="totalPlayers">0</div>
+                <div class="stat-label">총 접속자</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="botCount">0</div>
+                <div class="stat-label">봇 수</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="scoreCount">0</div>
+                <div class="stat-label">점수 기록</div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-value" id="zoneTimer">-</div>
+                <div class="stat-label">구역 남은 시간</div>
+            </div>
+        </div>
+
+        <!-- 버튼 -->
+        <div>
+            <button onclick="createBots(10)" id="btn10">10명 생성</button>
+            <button onclick="createBots(50)" id="btn50">50명 생성</button>
+            <button onclick="createBots(100)" id="btn100">100명 생성</button>
+            <button onclick="clearBots()" id="btnClear">모두 삭제</button>
+        </div>
+
+        <!-- 상태 로그 -->
+        <div id="status"></div>
+
+        <!-- 플레이어 목록 -->
+        <div class="player-list">
+            <h3>📋 접속자 목록</h3>
+            <div id="playerList"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js';
+        import { getDatabase, ref, set, onDisconnect, remove, onValue } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js';
+        import { getAuth, signInAnonymously } from 'https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js';
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDtqPDt8Ix_yOJ50oqCMWyYy89G5RjvQYg",
+            authDomain: "neleujimaseyo.firebaseapp.com",
+            databaseURL: "https://neleujimaseyo-default-rtdb.firebaseio.com", // ✅ 이거 있어?
+            projectId: "neleujimaseyo",
+            storageBucket: "neleujimaseyo.firebasestorage.app",
+            messagingSenderId: "982487378024",
+            appId: "1:982487378024:web:55773e4fae04784e45f3dd",
+            measurementId: "G-0DRRZXHH6V"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const database = getDatabase(app);
+        const auth = getAuth(app);
+
+        const botIds = [];
+        const botIntervals = [];
+
+        // 실시간 모니터링
+        function startMonitoring() {
+            // 플레이어 수 모니터링
+            const playersRef = ref(database, 'players');
+            onValue(playersRef, (snapshot) => {
+                const players = snapshot.val();
+                const count = players ? Object.keys(players).length : 0;
+                document.getElementById('totalPlayers').textContent = count;
+
+                // 플레이어 목록 표시
+                const playerListDiv = document.getElementById('playerList');
+                if (players) {
+                    playerListDiv.innerHTML = Object.entries(players)
+                        .map(([id, data]) => `
+                            <div class="player-item">
+                                ${id.substring(0, 8)}... | 
+                                위치: (${Math.floor(data.x)}, ${Math.floor(data.y)})
+                            </div>
+                        `).join('');
+                } else {
+                    playerListDiv.innerHTML = '<div style="opacity: 0.5;">접속자 없음</div>';
+                }
+            });
+
+            // 점수 수 모니터링
+            const scoresRef = ref(database, 'scores');
+            onValue(scoresRef, (snapshot) => {
+                const scores = snapshot.val();
+                const count = scores ? Object.keys(scores).length : 0;
+                document.getElementById('scoreCount').textContent = count;
+            });
+
+            // 구역 타이머 모니터링
+            const zoneRef = ref(database, 'zone');
+            onValue(zoneRef, (snapshot) => {
+                const zone = snapshot.val();
+                if (zone) {
+                    setInterval(() => {
+                        const elapsed = (Date.now() - zone.createdAt) / 1000;
+                        const remaining = Math.max(0, zone.duration - elapsed);
+                        document.getElementById('zoneTimer').textContent = 
+                            remaining.toFixed(1) + 's';
+                    }, 100);
+                }
+            });
+
+            // 봇 수 업데이트
+            setInterval(() => {
+                document.getElementById('botCount').textContent = botIds.length;
+            }, 1000);
+        }
+
+        function log(message) {
+            const statusDiv = document.getElementById('status');
+            const time = new Date().toLocaleTimeString();
+            statusDiv.innerHTML = `[${time}] ${message}<br>` + statusDiv.innerHTML;
+        }
+
+        function disableButtons(disabled) {
+            document.getElementById('btn10').disabled = disabled;
+            document.getElementById('btn50').disabled = disabled;
+            document.getElementById('btn100').disabled = disabled;
+        }
+
+        window.createBots = async function(count) {
+            disableButtons(true);
+            log(`🤖 ${count}명 봇 생성 시작...`);
+            
+            for (let i = 0; i < count; i++) {
+                try {
+                    // ✅ 로그아웃 후 새로 로그인
+                    await auth.signOut();
+                    
+                    const user = await signInAnonymously(auth);
+                    const userId = user.user.uid;
+                    
+                    console.log(`Bot ${i+1} 생성:`, userId);
+                    
+                    botIds.push(userId);
+                    
+                    let x = Math.random() * 4500 + 250;
+                    let y = Math.random() * 4500 + 250;
+                    
+                    const playerRef = ref(database, `players/${userId}`);
+                    await set(playerRef, { 
+                        x: x, 
+                        y: y, 
+                        lastUpdate: Date.now() 
+                    });
+                    
+                    onDisconnect(playerRef).remove();
+                    
+                    // 봇 랜덤 움직임
+                    const moveInterval = setInterval(() => {
+                        x += (Math.random() - 0.5) * 50;
+                        y += (Math.random() - 0.5) * 50;
+                        x = Math.max(100, Math.min(4900, x));
+                        y = Math.max(100, Math.min(4900, y));
+                        
+                        set(playerRef, {
+                            x: x,
+                            y: y,
+                            lastUpdate: Date.now()
+                        });
+                    }, 3000);
+                    
+                    botIntervals.push(moveInterval);
+                    
+                    if ((i + 1) % 10 === 0) {
+                        log(`✅ ${i + 1}/${count} 생성 완료`);
+                    }
+                } catch (error) {
+                    console.error('에러:', error);
+                    log(`❌ Bot ${i+1} 실패: ${error.message}`);
+                }
+                
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+            
+            log(`🎉 총 ${count}명 생성 완료!`);
+            disableButtons(false);
+        };
+
+        window.clearBots = async function() {
+            disableButtons(true);
+            log('🗑️ 모든 봇 삭제 중...');
+            
+            // 움직임 타이머 정리
+            botIntervals.forEach(interval => clearInterval(interval));
+            botIntervals.length = 0;
+            
+            // Firebase에서 삭제
+            for (const userId of botIds) {
+                const playerRef = ref(database, `players/${userId}`);
+                await remove(playerRef);
+            }
+            
+            botIds.length = 0;
+            log('✅ 모든 봇 삭제 완료');
+            disableButtons(false);
+        };
+
+        // 페이지 로드 시 모니터링 시작
+        startMonitoring();
+        log('✅ 모니터링 시작');
+    </script>
+</body>
+</html>

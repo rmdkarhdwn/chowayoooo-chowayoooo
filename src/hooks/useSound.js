@@ -28,20 +28,17 @@ export const useSound = () => {
     const playClick = () => {
         if (clickSound.current) {
             clickSound.current.currentTime = 0;
-            clickSound.current.play().catch(e => console.log('Audio play failed:', e));
         }
     };
 
     const playScore = () => {
         if (scoreSound.current) {
             scoreSound.current.currentTime = 0;
-            scoreSound.current.play().catch(e => console.log('Audio play failed:', e));
         }
     };
 
     const playBGM = () => {
         if (bgmSound.current) {
-            bgmSound.current.play().catch(e => console.log('Audio play failed:', e));
         }
     };
 
@@ -54,7 +51,6 @@ export const useSound = () => {
     const playZoneEnd = () => {
         if (zoneEndSound.current) {
             zoneEndSound.current.currentTime = 0;
-            zoneEndSound.current.play().catch(e => console.log('Audio play failed:', e));
         }
     };
 

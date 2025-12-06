@@ -12,6 +12,7 @@ import { renderGrid, renderZone, renderSquishEffect } from '../utils/renderHelpe
 
 
 function Game({ userId, nickname }) {
+    
     const canvasRef = useRef(null);
     const [position, setPosition] = useState({ x: 2500, y: 2500 });
     const [direction, setDirection] = useState('right');
@@ -19,11 +20,9 @@ function Game({ userId, nickname }) {
     const [squishPlayers, setSquishPlayers] = useState({});
     const [score, setScore] = useState(null);
     const scoreInitialized = useRef(false);
-    const { playClick, playScore, playBGM, playZoneEnd } = useSound(); // ✅ playZoneEnd 추가
-    const backgroundRef = useRef(null); // ✅ 여기로 이동
+    const { playClick, playScore, playBGM, playZoneEnd } = useSound();
     
-
-    // ✅ ref 추가
+    // ✅ ref 먼저 선언
     const positionRef = useRef(position);
     const directionRef = useRef(direction);
     const inZoneSinceRef = useRef(inZoneSince);
@@ -34,24 +33,26 @@ function Game({ userId, nickname }) {
     const squishesRef = useRef({}); 
     const wasInZone = useRef(false);
     const prevZoneId = useRef(null);
+    const backgroundRef = useRef(null);
+    const zoneImageRef = useRef(null);
+    const zoneSound = useRef(null);
 
     const CANVAS_WIDTH = window.innerWidth;
     const CANVAS_HEIGHT = window.innerHeight;
-    
 
     const keysPressed = useKeyboard();
-   const { otherPlayers, zone, loadedScore, leaderboard, squishes } = useFirebase(userId, position, nickname); // ✅ squishes 추가
+    
+    // ✅ useFirebase는 ref 선언 후에
+    const { otherPlayers, zone, loadedScore, leaderboard, squishes } = useFirebase(userId, position, nickname);
 
-
-    // 이미지 로드
+    // ✅ 이미지 로드 
     const { normalImage: characterImage, happyImage: characterHappy, backgroundImage, zoneImage } = useImageLoader(
         '/character.png',
         '/character-happy.png',
         '/background.png',
-        '/zone.png'  // ✅ 추가
+        '/zone.png'
     );
-
-    const zoneImageRef = useRef(null);
+    // squishes 업데이트 시 내가 클릭당했는지 확인
 
     // ✅ ref 동기화
     useEffect(() => {
@@ -74,9 +75,21 @@ function Game({ userId, nickname }) {
         zoneRef.current = zone;
     }, [zone]);
 
+    const prevSquishTime = useRef(0);
+
     useEffect(() => {
-    squishesRef.current = squishes;
-    }, [squishes]);
+        squishesRef.current = squishes;
+        
+        // ✅ 내가 클릭당했고, 새로운 클릭인 경우
+        if (squishes && squishes[userId]) {
+            const currentTime = squishes[userId].time;
+            
+            if (currentTime !== prevSquishTime.current) {
+                playClick();
+                prevSquishTime.current = currentTime;
+            }
+        }
+    }, [squishes, userId, playClick]);
 
     useEffect(() => {
     zoneImageRef.current = zoneImage;
@@ -170,11 +183,10 @@ function Game({ userId, nickname }) {
         
         return () => clearInterval(checkTimer);
     }, [inZoneSince, zone, userId]);
-    const zoneSound = useRef(null);
 
     // 구역 사운드 초기화
     useEffect(() => {
-        zoneSound.current = new Audio('/sounds/zone.mp3'); // 구역용 사운드 추가
+        zoneSound.current = new Audio('/sounds/zone.mp3'); // 구역용 사운드
         zoneSound.current.loop = true;
         zoneSound.current.volume = 0.3;
     }, []);
@@ -185,7 +197,6 @@ function Game({ userId, nickname }) {
             wasInZone.current = true;
             
             if (zoneSound.current) {
-                zoneSound.current.play().catch(e => console.log('Zone sound failed:', e));
             }
         } else {
             // ✅ wasInZone은 그대로 유지 (구역이 사라질 때만 false)
@@ -201,7 +212,6 @@ function Game({ userId, nickname }) {
     useEffect(() => {
         // 구역 ID가 바뀌고 && 안에 있었을 때
         if (prevZoneId.current && zone && zone.id !== prevZoneId.current && wasInZone.current) {
-            console.log('🎵 구역 바뀜! 사운드 재생!');
             playZoneEnd();
             wasInZone.current = false;
         }
@@ -254,13 +264,15 @@ function Game({ userId, nickname }) {
                     Math.pow(worldY - player.y, 2)
                 );
                 
+                // 클릭할 때
                 if (dist < PLAYER_SIZE / 2) {
                     const clickOffsetX = (worldX - player.x) / (PLAYER_SIZE / 2);
                     const clickOffsetY = (worldY - player.y) / (PLAYER_SIZE / 2);
                     
                     playClick();
                     
-                    // ✅ Firebase에 저장
+                    
+                    // Firebase에 저장
                     const squishRef = ref(database, `squishes/${id}`);
                     set(squishRef, {
                         clickX: clickOffsetX,
@@ -271,7 +283,7 @@ function Game({ userId, nickname }) {
                     // 500ms 후 삭제
                     setTimeout(() => {
                         remove(squishRef);
-                    }, 500);
+                    }, 1000);
                     
                     // 로컬 state도 업데이트 (즉각 반응)
                     setSquishPlayers(prev => ({
@@ -344,90 +356,139 @@ function Game({ userId, nickname }) {
             
             // Canvas 렌더링 - 다른 유저들
             if (characterImage) {
-                Object.entries(otherPlayersRef.current).forEach(([id, player]) => {
-                    const screenX = player.x - cameraX;
-                    const screenY = player.y - cameraY;
+            Object.entries(otherPlayersRef.current).forEach(([id, player]) => {
+                const screenX = player.x - cameraX;
+                const screenY = player.y - cameraY;
+                
+                if (isOnScreen(player.x, player.y, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE)) {
                     
-                    if (isOnScreen(player.x, player.y, cameraX, cameraY, CANVAS_WIDTH, CANVAS_HEIGHT, PLAYER_SIZE)) {
-                        
-                        const playerInZone = zoneRef.current && isInsideZone(
-                            player.x, 
-                            player.y, 
-                            zoneRef.current, 
-                            ZONE_SIZE
-                        );
-                        
-                        const playerImage = playerInZone ? characterHappy : characterImage;
-                        const playerSize = playerInZone ? PLAYER_SIZE * 0.8 : PLAYER_SIZE;
-                        
-                        // ✅ Firebase squishes 우선, 없으면 로컬
-                        // ✅ 안전하게 접근
-                        const squish = squishPlayersRef.current?.[id];
-                        
-                        if (squish) {
-                            renderSquishEffect(ctx, playerImage, squish, screenX, screenY, playerSize);
-                        } else {
-                            ctx.drawImage(
-                                playerImage,
-                                screenX - playerSize/2,
-                                screenY - playerSize/2,
-                                playerSize,
-                                playerSize
-                            );
-                        }
-                        
-                        // ✅ 닉네임 표시
-                        ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-                        ctx.fillRect(
-                            screenX - 50,
-                            screenY - playerSize/2 - 25,
-                            100,
-                            20
-                        );
-                        
-                        ctx.fillStyle = 'white';
-                        ctx.font = 'bold 14px Arial';
-                        ctx.textAlign = 'center';
-                        ctx.fillText(
-                            player.nickname || '익명',
-                            screenX,
-                            screenY - playerSize/2 - 10
+                    const playerInZone = zoneRef.current && isInsideZone(
+                        player.x, 
+                        player.y, 
+                        zoneRef.current, 
+                        ZONE_SIZE
+                    );
+                    
+                    const playerImage = playerInZone ? characterHappy : characterImage;
+                    const playerSize = playerInZone ? PLAYER_SIZE * 0.8 : PLAYER_SIZE;
+                    
+                    // ✅ 안전한 squish 체크
+                    let squish = null;
+                    
+                    // 로컬 우선 (즉각 반응)
+                    if (squishPlayersRef.current && squishPlayersRef.current[id]) {
+                        squish = squishPlayersRef.current[id];
+                    }
+                    
+                    // Firebase 백업 (다른 사람이 클릭한 것)
+                    if (!squish && squishesRef.current && squishesRef.current[id]) {
+                        squish = squishesRef.current[id];
+                    }
+                    
+                    if (squish) {
+                        renderSquishEffect(ctx, playerImage, squish, screenX, screenY, playerSize);
+                    } else {
+                        ctx.drawImage(
+                            playerImage,
+                            screenX - playerSize/2,
+                            screenY - playerSize/2,
+                            playerSize,
+                            playerSize
                         );
                     }
-                });
-            }
+                    
+                    // 닉네임 표시
+                    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                    ctx.fillRect(
+                        screenX - 50,
+                        screenY - playerSize/2 - 25,
+                        100,
+                        20
+                    );
+                    
+                    ctx.fillStyle = 'white';
+                    ctx.font = 'bold 14px Arial';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(
+                        player.nickname || '익명',
+                        screenX,
+                        screenY - playerSize/2 - 10
+                    );
+                }
+            });
+        }
             
             // 내 캐릭터
-            // 내 캐릭터
             if (characterImage && characterHappy) {
-                console.log('내 캐릭터 그리기:', {
-                    currentImage: inZoneSinceRef.current ? 'happy' : 'normal',
-                    size: inZoneSinceRef.current ? PLAYER_SIZE * 0.8 : PLAYER_SIZE,
-                    direction: directionRef.current
-                });
-                
                 ctx.save();
                 
                 const currentImage = inZoneSinceRef.current ? characterHappy : characterImage;
                 const size = inZoneSinceRef.current ? PLAYER_SIZE * 0.8 : PLAYER_SIZE;
                 
-                if (directionRef.current === 'left') {
-                    ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - size/2);
-                    ctx.scale(-1, 1);
-                    ctx.drawImage(currentImage, -size/2, 0, size, size);
+                // ✅ 내 왜곡 체크
+                let mySquish = null;
+                
+                if (squishPlayersRef.current && squishPlayersRef.current[userId]) {
+                    mySquish = squishPlayersRef.current[userId];
+                }
+                
+                if (!mySquish && squishesRef.current && squishesRef.current[userId]) {
+                    mySquish = squishesRef.current[userId];
+                }
+                
+                if (mySquish) {
+                    // 왜곡 효과
+                    const centerX = CANVAS_WIDTH / 2;
+                    const centerY = CANVAS_HEIGHT / 2;
+                    
+                    if (directionRef.current === 'left') {
+                        ctx.translate(centerX, centerY);
+                        ctx.scale(-1, 1);
+                        
+                        // ✅ 좌표: 중앙 기준, 왜곡 효과는 -size/2 오프셋
+                        const tempCanvas = document.createElement('canvas');
+                        tempCanvas.width = size;
+                        tempCanvas.height = size;
+                        const tempCtx = tempCanvas.getContext('2d');
+                        
+                        tempCtx.drawImage(currentImage, 0, 0, size, size);
+                        const imageData = tempCtx.getImageData(0, 0, size, size);
+                        
+                        // 왜곡 계산 (renderSquishEffect 내용 복사)
+                        // ... (복잡하니까 다른 방법)
+                        
+                        renderSquishEffect(ctx, currentImage, mySquish, 0, 0, size);
+                        ctx.translate(0, -size/2); // ✅ 위치 보정
+                    } else {
+                        renderSquishEffect(
+                            ctx, 
+                            currentImage, 
+                            mySquish, 
+                            centerX, 
+                            centerY, // ✅ 중앙
+                            size
+                        );
+                    }
                 } else {
-                    ctx.drawImage(
-                        currentImage, 
-                        CANVAS_WIDTH / 2 - size/2, 
-                        CANVAS_HEIGHT / 2 - size/2, 
-                        size, 
-                        size
-                    );
+                    // 일반 렌더링
+                    if (directionRef.current === 'left') {
+                        ctx.translate(CANVAS_WIDTH / 2, CANVAS_HEIGHT / 2 - size/2);
+                        ctx.scale(-1, 1);
+                        ctx.drawImage(currentImage, -size/2, 0, size, size);
+                    } else {
+                        ctx.drawImage(
+                            currentImage, 
+                            CANVAS_WIDTH / 2 - size/2, 
+                            CANVAS_HEIGHT / 2 - size/2, 
+                            size, 
+                            size
+                        );
+                    }
                 }
                 
                 ctx.restore();
                 
-                // ✅ 내 닉네임
+                // 내 닉네임
                 ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
                 ctx.fillRect(
                     CANVAS_WIDTH / 2 - 50,

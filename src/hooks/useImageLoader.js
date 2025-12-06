@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'; // ✅ 추가
+import { useEffect, useState } from 'react';
 
 export const useImageLoader = (normalSrc, happySrc, backgroundSrc, zoneSrc) => {
     const [normalImage, setNormalImage] = useState(null);

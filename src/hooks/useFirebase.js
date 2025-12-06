@@ -129,6 +129,22 @@ export const useFirebase = (userId, position,nickname) => {
         
         return () => unsubscribe();
     }, []);
+    // 접속자 수 계산
+    useEffect(() => {
+        const playersRef = ref(database, 'players');
+        
+        const unsubscribe = onValue(playersRef, (snapshot) => {
+            const players = snapshot.val();
+            const count = players ? Object.keys(players).length : 0;
+            
+            
+            if (count >= 100) {
+                console.warn('⚠️ 접속자 100명 도달!');
+            }
+        });
+        
+        return () => unsubscribe();
+    }, []);
 
     // ✅ squishes 구독
     useEffect(() => {
@@ -142,5 +158,5 @@ export const useFirebase = (userId, position,nickname) => {
         return () => unsubscribe();
     }, []);
 
-    return { otherPlayers, zone, loadedScore, leaderboard, squishes }; // ✅ squishes 추가
+    return { otherPlayers, zone, loadedScore, leaderboard, squishes };
 };

@@ -26,21 +26,15 @@ export const useSound = () => {
     }, []);
 
     const playClick = () => {
-        console.log('클릭 사운드 시도'); // ✅ 추가
         if (clickSound.current) {
             clickSound.current.currentTime = 0;
             clickSound.current.play()
-                .then(() => console.log('✅ 클릭 사운드 성공'))
-                .catch(e => console.log('❌ 클릭 사운드 실패:', e));
         }
     };
 
     const playBGM = () => {
         if (bgmSound.current) {
             bgmSound.current.play()
-                .catch(e => console.error('❌ BGM play() 실패:', e));
-        } else {
-            console.error('❌ bgmSound.current 없음');
         }
     };
 
@@ -53,22 +47,15 @@ export const useSound = () => {
     const playScore = () => {
         if (scoreSound.current) {
             scoreSound.current.currentTime = 0;
-            scoreSound.current.play()  // ✅ 추가
-                .then(() => console.log('✅ 점수 사운드 성공'))
-                .catch(e => console.log('❌ 점수 사운드 실패:', e));
+            scoreSound.current.play()
         }
     };
 
     const playZoneEnd = () => {
-        console.log('playZoneEnd 호출'); // ✅ 추가
         
         if (zoneEndSound.current) {
             zoneEndSound.current.currentTime = 0;
-            zoneEndSound.current.play()  // ✅ 추가
-                .then(() => console.log('✅ 구역 종료 사운드 성공'))
-                .catch(e => console.log('❌ 구역 종료 사운드 실패:', e));
-        } else {
-            console.log('❌ zoneEndSound.current 없음');
+            zoneEndSound.current.play()
         }
     };
 

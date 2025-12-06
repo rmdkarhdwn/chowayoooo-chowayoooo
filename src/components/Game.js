@@ -99,9 +99,25 @@ function Game({ userId, nickname }) {
         backgroundRef.current = backgroundImage;
     }, [backgroundImage]);
 
+    const audioStarted = useRef(false);
+
     useEffect(() => {
-        playBGM();
-        }, []);
+        const startAudio = () => {
+            
+            if (!audioStarted.current) {
+                playBGM();
+                audioStarted.current = true;
+            }
+        };
+        
+        window.addEventListener('click', startAudio, { once: true });
+        window.addEventListener('keydown', startAudio, { once: true });
+        
+        return () => {
+            window.removeEventListener('click', startAudio);
+            window.removeEventListener('keydown', startAudio);
+        };
+    }, [playBGM]);
         
     useEffect(() => {
         squishPlayersRef.current = squishPlayers;
@@ -199,8 +215,6 @@ function Game({ userId, nickname }) {
             if (zoneSound.current) {
             }
         } else {
-            // ✅ wasInZone은 그대로 유지 (구역이 사라질 때만 false)
-            
             if (zoneSound.current) {
                 zoneSound.current.pause();
                 zoneSound.current.currentTime = 0;

@@ -39,6 +39,10 @@ export const useSound = () => {
 
     const playBGM = () => {
         if (bgmSound.current) {
+            bgmSound.current.play()
+                .catch(e => console.error('❌ BGM play() 실패:', e));
+        } else {
+            console.error('❌ bgmSound.current 없음');
         }
     };
 

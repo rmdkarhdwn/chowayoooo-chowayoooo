@@ -84,7 +84,10 @@ function Game({ userId, nickname }) {
         if (squishes && squishes[userId]) {
             const currentTime = squishes[userId].time;
             
-            if (currentTime !== prevSquishTime.current) {
+            // ✅ 내가 방금 클릭한 건지 확인 (1초 이내면 무시)
+            const justClicked = Date.now() - currentTime < 100;
+            
+            if (currentTime !== prevSquishTime.current && !justClicked) {
                 playClick();
                 prevSquishTime.current = currentTime;
             }
@@ -213,6 +216,7 @@ function Game({ userId, nickname }) {
             wasInZone.current = true;
             
             if (zoneSound.current) {
+                zoneSound.current.play().catch(e => console.log('Zone sound failed:', e)); // ✅ 추가!
             }
         } else {
             if (zoneSound.current) {
@@ -224,8 +228,15 @@ function Game({ userId, nickname }) {
 
     // 구역 변경 감지
     useEffect(() => {
+        console.log('구역 체크:', {
+            prevZoneId: prevZoneId.current,
+            currentZoneId: zone?.id,
+            wasInZone: wasInZone.current
+        });
+        
         // 구역 ID가 바뀌고 && 안에 있었을 때
         if (prevZoneId.current && zone && zone.id !== prevZoneId.current && wasInZone.current) {
+            console.log('🎵 구역 종료 사운드 재생!');
             playZoneEnd();
             wasInZone.current = false;
         }

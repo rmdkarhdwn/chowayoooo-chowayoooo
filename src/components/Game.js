@@ -2,13 +2,13 @@ import { useEffect, useRef, useState } from 'react';
 import { useKeyboard } from '../hooks/useKeyboard';
 import { useFirebase } from '../hooks/useFirebase';
 import { useImageLoader } from '../hooks/useImageLoader';
-import { MAP_SIZE, MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, GRID_SPACING, ZONE_SIZE } from '../utils/constants';
-import { ref, set,remove } from 'firebase/database';
+import { MAP_WIDTH, MAP_HEIGHT, PLAYER_SIZE, PLAYER_SPEED, ZONE_SIZE } from '../utils/constants';
+import { ref, set, remove } from 'firebase/database';
 import { useSound } from '../hooks/useSound';
 import { database } from '../firebase';
 import Leaderboard from './Leaderboard';
 import { isInsideZone, isOnScreen } from '../utils/gameHelpers';
-import { renderGrid, renderZone, renderSquishEffect } from '../utils/renderHelpers';
+import { renderZone, renderSquishEffect } from '../utils/renderHelpers';
 
 
 function Game({ userId, nickname }) {
@@ -20,7 +20,7 @@ function Game({ userId, nickname }) {
     const [squishPlayers, setSquishPlayers] = useState({});
     const [score, setScore] = useState(null);
     const scoreInitialized = useRef(false);
-    const { playClick, playScore, playBGM, playZoneEnd } = useSound();
+    const { playClick, playBGM, playZoneEnd } = useSound();
     
     // ✅ ref 먼저 선언
     const positionRef = useRef(position);
@@ -29,7 +29,6 @@ function Game({ userId, nickname }) {
     const otherPlayersRef = useRef({});
     const zoneRef = useRef(null);
     const squishPlayersRef = useRef({});
-    const prevZone = useRef(null);
     const squishesRef = useRef({}); 
     const wasInZone = useRef(false);
     const prevZoneId = useRef(null);
@@ -177,7 +176,7 @@ function Game({ userId, nickname }) {
 
         const interval = setInterval(gameLoop, 1000 / 60);
         return () => clearInterval(interval);
-    }, [direction, zone, inZoneSince]);
+    }, [direction, inZoneSince, keysPressed, zone]);
 
     // 5초 체크
     // 5초 체크
@@ -260,7 +259,7 @@ function Game({ userId, nickname }) {
             nickname: nickname,
             lastUpdate: Date.now()
         });
-    }, [score, userId]);
+    }, [nickname, score, userId]);
 
     // Canvas 클릭 이벤트
     useEffect(() => {
@@ -327,7 +326,7 @@ function Game({ userId, nickname }) {
         
         canvas.addEventListener('click', handleClick);
         return () => canvas.removeEventListener('click', handleClick);
-    }, [position, otherPlayers, playClick]);
+    }, [CANVAS_HEIGHT, CANVAS_WIDTH, otherPlayers, playClick, position]);
 
     // Canvas 렌더링
         useEffect(() => {
@@ -463,19 +462,7 @@ function Game({ userId, nickname }) {
                     if (directionRef.current === 'left') {
                         ctx.translate(centerX, centerY);
                         ctx.scale(-1, 1);
-                        
-                        // ✅ 좌표: 중앙 기준, 왜곡 효과는 -size/2 오프셋
-                        const tempCanvas = document.createElement('canvas');
-                        tempCanvas.width = size;
-                        tempCanvas.height = size;
-                        const tempCtx = tempCanvas.getContext('2d');
-                        
-                        tempCtx.drawImage(currentImage, 0, 0, size, size);
-                        const imageData = tempCtx.getImageData(0, 0, size, size);
-                        
-                        // 왜곡 계산 (renderSquishEffect 내용 복사)
-                        // ... (복잡하니까 다른 방법)
-                        
+
                         renderSquishEffect(ctx, currentImage, mySquish, 0, 0, size);
                         ctx.translate(0, -size/2); // ✅ 위치 보정
                     } else {
@@ -536,7 +523,7 @@ function Game({ userId, nickname }) {
                 cancelAnimationFrame(animationId);
             }
         };
-    }, [characterImage, characterHappy, CANVAS_WIDTH, CANVAS_HEIGHT]);
+    }, [CANVAS_HEIGHT, CANVAS_WIDTH, characterHappy, characterImage, nickname, userId]);
 
     return (
         <>

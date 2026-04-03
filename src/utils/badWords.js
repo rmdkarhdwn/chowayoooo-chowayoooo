@@ -15,7 +15,7 @@ export function validateNickname(nickname) {
     const lower = nickname.toLowerCase();
     
     // 금지어 체크
-    for (let word of badWords) {
+    for (const word of badWords) {
         if (lower.includes(word)) {
             return { valid: false, reason: '부적절한 단어가 포함되어 있습니다' };
         }
@@ -30,7 +30,7 @@ export function validateNickname(nickname) {
     }
     
     // 특수문자 체크
-    const specialChars = /[!@#$%^&*()_+=\[\]{};':"\\|,.<>\/?]/;
+    const specialChars = new RegExp("[!@#$%^&*()_+={}\\[\\];:'\"\\\\|,.<>/?-]");
     if (specialChars.test(nickname)) {
         return { valid: false, reason: '특수문자는 사용할 수 없습니다' };
     }

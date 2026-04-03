@@ -1,34 +1,13 @@
-import { useEffect, useState } from 'react';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
-import { ref, onValue } from 'firebase/database';
-import { auth, database } from './firebase';
+import { useState } from 'react';
 import Game from './components/Game';
 import NicknameModal from './components/NicknameModal';
+import { useAuth } from './features/lobby/hooks/useAuth';
+import { usePlayerCapacity } from './features/lobby/hooks/usePlayerCapacity';
 
 function App() {
-  const [user, setUser] = useState(null);
+  const user = useAuth();
+  const playerCount = usePlayerCapacity();
   const [nickname, setNickname] = useState(null);
-  const [playerCount, setPlayerCount] = useState(0);
-
-  useEffect(() => {
-    signInAnonymously(auth);
-    onAuthStateChanged(auth, (currentUser) => {
-      setUser(currentUser);
-    });
-  }, []);
-
-  // ✅ 접속자 수 모니터링
-  useEffect(() => {
-    const playersRef = ref(database, 'players');
-    
-    const unsubscribe = onValue(playersRef, (snapshot) => {
-      const players = snapshot.val();
-      const count = players ? Object.keys(players).length : 0;
-      setPlayerCount(count);
-    });
-    
-    return () => unsubscribe();
-  }, []);
 
   if (!user) {
     return <div>로딩중...</div>;
